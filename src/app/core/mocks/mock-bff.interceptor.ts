@@ -12,6 +12,8 @@ import { Observable, delay, map, of, shareReplay, switchMap, throwError } from '
 
 import { BFF_BASE_URL } from '../api/bff-api.config';
 import { SduiAction, SduiActionResult } from '../sdui';
+import { FilaScreen } from '../../templates/template-contract.model';
+import { buildAnaliseMock } from './mock-analysis';
 import { MockTokenClaims, verifyMockToken } from './mock-identity';
 import { Mesa, mesasDoUsuario, telaDaFila } from './mock-mesas';
 import { EXTRA_FILTERS, MockProposal, MockViewer, assign, queryQueue, queueSummary } from './mock-queue';
@@ -20,13 +22,6 @@ const LATENCY_MS = 450;
 
 /** Marca requisições internas do mock (leitura dos JSONs) para não serem reinterceptadas. */
 const MOCK_ASSET = new HttpContextToken(() => false);
-
-/** Telas de análise por produto — propostas da fila usam o template do seu produto. */
-const ANALYSIS_TEMPLATE: Readonly<Record<string, string>> = {
-  CREDITO_VAREJO: 'PRP-2026-000123',
-  VEICULOS: 'PRP-2026-000456',
-  CONSORCIO: 'PRP-2026-000789',
-};
 
 const ACTION_LABEL: Readonly<Record<string, string>> = {
   aprovar: 'aprovada',
@@ -60,7 +55,7 @@ interface RequestUser {
  *   GET  /v1/propostas?filtros&page&sort     → página filtrada, restrita às mesas
  *   GET  /v1/propostas/resumo                → contadores da mesa
  *   POST /v1/propostas/:id/atribuicao        → "Pegar e Atuar"
- *   GET  /v1/propostas/:id/telas/analise     → tela de análise (por produto)
+ *   GET  /v1/propostas/:id/telas/analise     → tela de análise composta a partir da proposta
  *   POST /v1/propostas/:id/acoes/:acao       → decisão com efeitos
  */
 export const mockBffInterceptor: HttpInterceptorFn = (req, next) => {
@@ -110,7 +105,7 @@ export const mockBffInterceptor: HttpInterceptorFn = (req, next) => {
 
   // ---- fila ----
   if (req.method === 'GET' && path === '/v1/telas/fila') {
-    return respond(asset<Record<string, unknown>>(telaDaFila(mesas)).pipe(map((tela) => scopeQueueScreen(tela, user))));
+    return respond(asset<FilaScreen>(telaDaFila(mesas)).pipe(map((tela) => scopeQueueScreen(tela, user))));
   }
 
   if (req.method === 'GET' && path === '/v1/propostas/resumo') {
@@ -122,7 +117,7 @@ export const mockBffInterceptor: HttpInterceptorFn = (req, next) => {
     return respond(
       loadQueue().pipe(
         map((items) =>
-          queryQueue(items, user.viewer, {
+          withRowPermissions(queryQueue(items, user.viewer, {
             busca: p.get('busca'),
             situacao: p.get('situacao'),
             produto: p.get('produto'),
@@ -132,7 +127,7 @@ export const mockBffInterceptor: HttpInterceptorFn = (req, next) => {
             size: Number(p.get('size') ?? 10),
             sortBy: p.get('sortBy'),
             sortDir: p.get('sortDir'),
-          }),
+          })),
         ),
       ),
     );
@@ -169,21 +164,7 @@ export const mockBffInterceptor: HttpInterceptorFn = (req, next) => {
 
   const screen = /^\/v1\/propostas\/([^/]+)\/telas\/analise$/.exec(path);
   if (req.method === 'GET' && screen) {
-    const id = screen[1]!;
-    const templateId = Object.entries(ANALYSIS_TEMPLATE).find(([, template]) => template === id);
-    if (templateId) {
-      // Propostas-exemplo fixas: também respeitam a mesa.
-      return user.viewer.produtos.includes(templateId[0])
-        ? respond(asset(`telas/analise/${id}.json`))
-        : fail(req, 403, `A proposta ${id} não pertence à sua mesa.`);
-    }
-    return withProposal(id, (proposal) =>
-      respond(
-        asset<Record<string, unknown>>(`telas/analise/${ANALYSIS_TEMPLATE[proposal.produto]}.json`).pipe(
-          map((tela) => fillAnalysis(tela, proposal)),
-        ),
-      ),
-    );
+    return withProposal(screen[1]!, (proposal) => respond(of(buildAnaliseMock(proposal))));
   }
 
   const action = /^\/v1\/propostas\/([^/]+)\/acoes\/([\w-]+)$/.exec(path);
@@ -197,49 +178,26 @@ export const mockBffInterceptor: HttpInterceptorFn = (req, next) => {
 };
 
 /**
- * Ajustes por usuário sobre o layout parametrizado da mesa. Na visão
- * consolidada (supervisor), o filtro de produto só oferece as mesas dele.
+ * Ajustes por usuário sobre a fila parametrizada da mesa. Na visão
+ * consolidada (supervisor), o subtítulo lista as mesas e o filtro de
+ * produto só oferece as mesas dele.
  */
-function scopeQueueScreen(tela: Record<string, unknown>, user: RequestUser): Record<string, unknown> {
-  const data = tela['data'] as { listas: Record<string, { value: string; label: string }[]> } & Record<string, unknown>;
-  const produtos = data.listas['produtos'];
+function scopeQueueScreen(tela: FilaScreen, user: RequestUser): FilaScreen {
+  if (user.mesas.length === 1) return tela;
   return {
     ...tela,
-    data: {
-      ...data,
-      escopo: { descricao: user.mesas.map((mesa) => mesa.nome).join(', ') },
-      listas: {
-        ...data.listas,
-        ...(produtos && {
-          produtos: produtos.filter((option) => !option.value || user.viewer.produtos.includes(option.value)),
-        }),
-      },
-    },
+    subtitulo: `Visão consolidada · ${user.mesas.map((mesa) => mesa.nome).join(', ')}`,
+    filtros: tela.filtros.map((filtro) =>
+      filtro.tipo === 'select' && filtro.campo === 'produto'
+        ? { ...filtro, opcoes: filtro.opcoes.filter((opcao) => user.viewer.produtos.includes(opcao.value)) }
+        : filtro,
+    ),
   };
 }
 
-/** Injeta os dados da proposta da fila no template de análise do produto. */
-function fillAnalysis(tela: Record<string, unknown>, p: MockProposal): Record<string, unknown> {
-  const data = tela['data'] as Record<string, Record<string, unknown>>;
-  return {
-    ...tela,
-    data: {
-      ...data,
-      proposta: {
-        ...data['proposta'],
-        id: p.id,
-        numero: p.id,
-        produtoDescricao: p.produtoDescricao,
-        valorSolicitado: p.valor,
-        dataEntrada: p.dataEnvio,
-      },
-      cliente: { ...data['cliente'], nome: p.cliente, cpf: p.documento },
-      ...(p.placa !== undefined && { veiculo: { ...data['veiculo'], marcaModelo: p.veiculo, placa: p.placa ?? '0 km' } }),
-      ...(p.grupoCota && {
-        consorcio: { ...data['consorcio'], grupo: p.grupoCota.split('/')[0], cota: p.grupoCota.split('/')[1] },
-      }),
-    },
-  };
+/** Permissão por linha calculada no servidor — o front só a respeita (`campoHabilitado`). */
+function withRowPermissions<T extends { items: readonly MockProposal[] }>(page: T) {
+  return { ...page, items: page.items.map((item) => ({ ...item, podePegar: item.situacao !== 'EM_ATUACAO' })) };
 }
 
 function actionResult(id: string, name: string): SduiActionResult {

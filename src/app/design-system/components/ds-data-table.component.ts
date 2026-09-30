@@ -49,7 +49,8 @@ const MAX_PAGE_BUTTONS = 5;
           (matSortChange)="onSort($event)"
         >
           @for (column of props().columns; track column.key) {
-            <ng-container [matColumnDef]="column.key">
+            <!-- Coluna de ações fica fixa à direita: tabelas largas rolam sem esconder os botões. -->
+            <ng-container [matColumnDef]="column.key" [stickyEnd]="column.kind === 'actions'">
               <th
                 mat-header-cell
                 *matHeaderCellDef
@@ -135,6 +136,10 @@ const MAX_PAGE_BUTTONS = 5;
     </div>
   `,
   styles: `
+:host {
+      display: block;
+      min-width: 0;
+    }
     .card {
       background: var(--ds-surface);
       border: 1px solid var(--ds-border);
@@ -158,6 +163,16 @@ const MAX_PAGE_BUTTONS = 5;
     }
     th.mat-mdc-header-cell {
       background: var(--ds-surface-muted);
+    }
+    .mat-mdc-header-cell,
+    .mat-mdc-cell {
+      padding: 0 12px;
+    }
+    .mat-mdc-cell.mat-mdc-table-sticky {
+      background: var(--ds-surface);
+    }
+    .mat-mdc-table-sticky-border-elem-right {
+      box-shadow: -6px 0 8px -6px rgb(16 24 40 / 18%);
     }
     .end {
       text-align: end;

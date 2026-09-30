@@ -2,11 +2,13 @@ import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 
 import { BFF_BASE_URL } from '../core/api/bff-api.config';
-import { SduiSchemaError, SduiScreenComponent, parseSduiScreen } from '../core/sdui';
+import { SduiSchemaError, SduiScreenComponent } from '../core/sdui';
 import { DsFeedbackComponent } from '../design-system/components/ds-feedback.component';
+import { compileTemplateScreen } from '../templates/compile-template';
 
 /**
- * Busca uma tela SDUI no BFF e a entrega ao motor, com estados de carga/erro.
+ * Busca uma tela no BFF (contrato por template), monta o layout base e
+ * entrega ao motor SDUI, com estados de carga/erro.
  * As páginas (features) só informam o endpoint — não conhecem layout nem produto.
  */
 @Component({
@@ -32,7 +34,7 @@ export class SduiRemoteScreenComponent {
   readonly #baseUrl = inject(BFF_BASE_URL);
 
   protected readonly screen = httpResource(() => `${this.#baseUrl}${this.endpoint()}`, {
-    parse: parseSduiScreen,
+    parse: compileTemplateScreen,
   });
 
   protected readonly errorMessage = computed(() => {

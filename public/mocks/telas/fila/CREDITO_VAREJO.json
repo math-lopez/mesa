@@ -1,453 +1,79 @@
 {
   "meta": {
-    "schemaVersion": "1.0",
-    "screenId": "work-queue",
+    "schemaVersion": "2.0",
     "product": "CREDITO_VAREJO",
-    "revision": "fila-credito_varejo@2026.09.2",
+    "revision": "fila-credito_varejo@2026.09.3",
     "generatedAt": "2026-09-29T09:00:00-03:00"
   },
-  "data": {
-    "listas": {
-      "situacoes": [
-        {
-          "value": "",
-          "label": "Todos"
-        },
-        {
-          "value": "DISPONIVEL",
-          "label": "Disponível para pegar"
-        },
-        {
-          "value": "EM_ATUACAO",
-          "label": "Em minha atuação"
-        },
-        {
-          "value": "URGENTE",
-          "label": "Urgentes"
-        }
-      ],
-      "modalidades": [
-        {
-          "value": "",
-          "label": "Todos"
-        },
-        {
-          "value": "CREDITO_PESSOAL",
-          "label": "Crédito Pessoal"
-        },
-        {
-          "value": "CAPITAL_GIRO",
-          "label": "Capital de Giro"
-        },
-        {
-          "value": "GIRO_RAPIDO",
-          "label": "Crédito Giro Rápido"
-        }
-      ],
-      "segmentos": [
-        {
-          "value": "",
-          "label": "Todos"
-        },
-        {
-          "value": "PF",
-          "label": "Pessoa Física"
-        },
-        {
-          "value": "PJ",
-          "label": "Pessoa Jurídica"
-        }
+  "template": "fila",
+  "titulo": "Fila de Propostas para Atuação",
+  "subtitulo": "Mesa Crédito Varejo",
+  "fonte": {"listagem":"/v1/propostas","resumo":"/v1/propostas/resumo"},
+  "contadores": [
+    {"label":"Disponíveis para pegar","tom":"info","chave":"disponiveis","filtro":{"situacao":"DISPONIVEL"}},
+    {"label":"Em minha atuação","tom":"warning","chave":"emAtuacao","filtro":{"situacao":"EM_ATUACAO"}},
+    {"label":"Urgentes","tom":"danger","chave":"urgentes","filtro":{"situacao":"URGENTE"}}
+  ],
+  "filtros": [
+    {"campo":"busca","tipo":"texto","label":"Buscar por ID, CPF/CNPJ ou Cliente"},
+    {
+      "campo": "situacao",
+      "tipo": "select",
+      "label": "Status",
+      "valorInicial": "DISPONIVEL",
+      "opcoes": [
+        {"value":"DISPONIVEL","label":"Disponível para pegar"},
+        {"value":"EM_ATUACAO","label":"Em minha atuação"},
+        {"value":"URGENTE","label":"Urgentes"}
       ]
+    },
+    {
+      "campo": "modalidade",
+      "tipo": "select",
+      "label": "Modalidade",
+      "opcoes": [
+        {"value":"CREDITO_PESSOAL","label":"Crédito Pessoal"},
+        {"value":"CAPITAL_GIRO","label":"Capital de Giro"},
+        {"value":"GIRO_RAPIDO","label":"Crédito Giro Rápido"}
+      ]
+    },
+    {
+      "campo": "segmento",
+      "tipo": "select",
+      "label": "Segmento",
+      "opcoes": [{"value":"PF","label":"Pessoa Física"},{"value":"PJ","label":"Pessoa Jurídica"}]
     }
-  },
-  "state": {
-    "filtros": {
-      "busca": null,
-      "situacao": "DISPONIVEL",
-      "modalidade": "",
-      "segmento": ""
-    },
-    "consulta": {
-      "filtros": {
-        "busca": null,
-        "situacao": "DISPONIVEL",
-        "modalidade": "",
-        "segmento": ""
-      },
-      "tabela": {
-        "pageIndex": 0,
-        "pageSize": 10,
-        "sort": {
-          "active": "dataEnvio",
-          "direction": "desc"
-        }
-      }
+  ],
+  "colunas": [
+    {"campo":"id","label":"ID","prefixo":"#","ordenavel":true},
+    {"campo":"cliente","label":"Cliente","ordenavel":true},
+    {"campo":"segmento","label":"Segmento"},
+    {"campo":"produtoDescricao","label":"Modalidade"},
+    {"campo":"valor","label":"Valor","formato":"currency","ordenavel":true},
+    {"campo":"dataEnvio","label":"Data de Envio","formato":"datetime","ordenavel":true},
+    {
+      "campo": "statusDescricao",
+      "label": "Status",
+      "tipo": "badge",
+      "campoTom": "status",
+      "tons": {"DISPONIVEL":"info","PENDENTE":"warning","URGENTE":"danger","EM_ATUACAO":"neutral"}
     }
-  },
-  "sources": {
-    "resumo": {
-      "endpoint": "/v1/propostas/resumo"
+  ],
+  "acoesLinha": [
+    {
+      "label": "Pegar e Atuar",
+      "variante": "primary",
+      "campoHabilitado": "podePegar",
+      "motivoBloqueio": "Esta proposta já está em atuação. Use Visualizar para abri-la.",
+      "executa": {"tipo":"requisicao","metodo":"POST","endpoint":"/v1/propostas/{id}/atribuicao"}
     },
-    "fila": {
-      "endpoint": "/v1/propostas",
-      "params": {
-        "busca": {
-          "$bind": "state.consulta.filtros.busca"
-        },
-        "situacao": {
-          "$bind": "state.consulta.filtros.situacao"
-        },
-        "modalidade": {
-          "$bind": "state.consulta.filtros.modalidade"
-        },
-        "segmento": {
-          "$bind": "state.consulta.filtros.segmento"
-        },
-        "page": {
-          "$bind": "state.consulta.tabela.pageIndex"
-        },
-        "size": {
-          "$bind": "state.consulta.tabela.pageSize"
-        },
-        "sortBy": {
-          "$bind": "state.consulta.tabela.sort.active"
-        },
-        "sortDir": {
-          "$bind": "state.consulta.tabela.sort.direction"
-        }
-      }
+    {
+      "label": "Visualizar",
+      "variante": "secondary",
+      "executa": {"tipo":"navegacao","rota":"/propostas/{id}/analise"}
     }
-  },
-  "actions": {
-    "FILTRAR": {
-      "kind": "setState",
-      "path": "state.consulta.filtros",
-      "value": {
-        "$bind": "state.filtros"
-      },
-      "onSuccess": [
-        "PRIMEIRA_PAGINA"
-      ]
-    },
-    "PRIMEIRA_PAGINA": {
-      "kind": "setState",
-      "path": "state.consulta.tabela.pageIndex",
-      "value": 0
-    },
-    "LIMPAR_FILTROS": {
-      "kind": "setState",
-      "path": "state.filtros",
-      "value": {
-        "busca": null,
-        "situacao": "",
-        "modalidade": "",
-        "segmento": ""
-      },
-      "onSuccess": [
-        "FILTRAR"
-      ]
-    },
-    "ATALHO_DISPONIVEIS": {
-      "kind": "setState",
-      "path": "state.filtros.situacao",
-      "value": "DISPONIVEL",
-      "onSuccess": [
-        "FILTRAR"
-      ]
-    },
-    "ATALHO_EM_ATUACAO": {
-      "kind": "setState",
-      "path": "state.filtros.situacao",
-      "value": "EM_ATUACAO",
-      "onSuccess": [
-        "FILTRAR"
-      ]
-    },
-    "ATALHO_URGENTES": {
-      "kind": "setState",
-      "path": "state.filtros.situacao",
-      "value": "URGENTE",
-      "onSuccess": [
-        "FILTRAR"
-      ]
-    },
-    "PEGAR_E_ATUAR": {
-      "kind": "http",
-      "method": "POST",
-      "endpoint": "/v1/propostas/{item.id}/atribuicao",
-      "enabledWhen": {
-        "op": "neq",
-        "path": "item.situacao",
-        "value": "EM_ATUACAO"
-      },
-      "disabledReason": "Esta proposta já está em atuação. Use Visualizar para abri-la."
-    },
-    "VISUALIZAR": {
-      "kind": "navigate",
-      "route": "/propostas/{item.id}/analise"
-    }
-  },
-  "layout": {
-    "id": "page",
-    "type": "layout.page",
-    "props": {
-      "title": "Fila de Propostas para Atuação",
-      "subtitle": "Mesa Crédito Varejo"
-    },
-    "slots": {
-      "toolbar": [
-        {
-          "id": "cnt-disponiveis",
-          "type": "action.counter",
-          "props": {
-            "label": "Disponíveis para pegar",
-            "count": {
-              "$bind": "sources.resumo.value.disponiveis"
-            },
-            "tone": "info",
-            "active": {
-              "$when": {
-                "op": "eq",
-                "path": "state.consulta.filtros.situacao",
-                "value": "DISPONIVEL"
-              }
-            }
-          },
-          "on": {
-            "click": "ATALHO_DISPONIVEIS"
-          }
-        },
-        {
-          "id": "cnt-em-atuacao",
-          "type": "action.counter",
-          "props": {
-            "label": "Em minha atuação",
-            "count": {
-              "$bind": "sources.resumo.value.emAtuacao"
-            },
-            "tone": "warning",
-            "active": {
-              "$when": {
-                "op": "eq",
-                "path": "state.consulta.filtros.situacao",
-                "value": "EM_ATUACAO"
-              }
-            }
-          },
-          "on": {
-            "click": "ATALHO_EM_ATUACAO"
-          }
-        },
-        {
-          "id": "cnt-urgentes",
-          "type": "action.counter",
-          "props": {
-            "label": "Urgentes",
-            "count": {
-              "$bind": "sources.resumo.value.urgentes"
-            },
-            "tone": "danger",
-            "active": {
-              "$when": {
-                "op": "eq",
-                "path": "state.consulta.filtros.situacao",
-                "value": "URGENTE"
-              }
-            }
-          },
-          "on": {
-            "click": "ATALHO_URGENTES"
-          }
-        }
-      ],
-      "main": [
-        {
-          "id": "sec-filtros",
-          "type": "layout.section",
-          "props": {
-            "title": "Filtros de Busca"
-          },
-          "children": [
-            {
-              "id": "grid-filtros",
-              "type": "layout.grid",
-              "props": {
-                "columns": 12,
-                "align": "end"
-              },
-              "children": [
-                {
-                  "id": "f-busca",
-                  "type": "input.text",
-                  "span": 3,
-                  "bind": "state.filtros.busca",
-                  "props": {
-                    "label": "Buscar por ID, CPF/CNPJ ou Cliente",
-                    "icon": "search"
-                  },
-                  "on": {
-                    "submit": "FILTRAR"
-                  }
-                },
-                {
-                  "id": "f-situacao",
-                  "type": "input.select",
-                  "span": 2,
-                  "bind": "state.filtros.situacao",
-                  "props": {
-                    "label": "Status",
-                    "options": {
-                      "$bind": "data.listas.situacoes"
-                    }
-                  }
-                },
-                {
-                  "id": "f-modalidade",
-                  "type": "input.select",
-                  "span": 2,
-                  "bind": "state.filtros.modalidade",
-                  "props": {
-                    "label": "Modalidade",
-                    "options": {
-                      "$bind": "data.listas.modalidades"
-                    }
-                  }
-                },
-                {
-                  "id": "f-segmento",
-                  "type": "input.select",
-                  "span": 2,
-                  "bind": "state.filtros.segmento",
-                  "props": {
-                    "label": "Segmento",
-                    "options": {
-                      "$bind": "data.listas.segmentos"
-                    }
-                  }
-                },
-                {
-                  "id": "bar-filtros",
-                  "type": "layout.actionBar",
-                  "span": 3,
-                  "props": {
-                    "align": "start"
-                  },
-                  "children": [
-                    {
-                      "id": "btn-filtrar",
-                      "type": "action.button",
-                      "props": {
-                        "label": "Filtrar",
-                        "variant": "primary"
-                      },
-                      "on": {
-                        "click": "FILTRAR"
-                      }
-                    },
-                    {
-                      "id": "btn-limpar",
-                      "type": "action.button",
-                      "props": {
-                        "label": "Limpar filtros",
-                        "variant": "ghost"
-                      },
-                      "on": {
-                        "click": "LIMPAR_FILTROS"
-                      }
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "id": "tbl-fila",
-          "type": "data.table",
-          "bind": "state.consulta.tabela",
-          "props": {
-            "rowKey": "id",
-            "itemLabel": "propostas",
-            "rows": {
-              "$bind": "sources.fila.value.items",
-              "default": null
-            },
-            "total": {
-              "$bind": "sources.fila.value.total",
-              "default": 0
-            },
-            "loading": {
-              "$bind": "sources.fila.loading"
-            },
-            "error": {
-              "$bind": "sources.fila.error"
-            },
-            "emptyMessage": "Nenhuma proposta encontrada para os filtros informados.",
-            "columns": [
-              {
-                "key": "id",
-                "header": "ID",
-                "prefix": "#",
-                "sortable": true
-              },
-              {
-                "key": "cliente",
-                "header": "Cliente",
-                "sortable": true
-              },
-              {
-                "key": "segmento",
-                "header": "Segmento"
-              },
-              {
-                "key": "produtoDescricao",
-                "header": "Modalidade"
-              },
-              {
-                "key": "valor",
-                "header": "Valor",
-                "format": "currency",
-                "sortable": true
-              },
-              {
-                "key": "dataEnvio",
-                "header": "Data de Envio",
-                "format": "datetime",
-                "sortable": true
-              },
-              {
-                "key": "statusDescricao",
-                "header": "Status",
-                "kind": "badge",
-                "toneKey": "status",
-                "toneMap": {
-                  "DISPONIVEL": "info",
-                  "PENDENTE": "warning",
-                  "URGENTE": "danger",
-                  "EM_ATUACAO": "neutral"
-                }
-              },
-              {
-                "key": "acoes",
-                "header": "Ações",
-                "kind": "actions",
-                "actions": [
-                  {
-                    "action": "PEGAR_E_ATUAR",
-                    "label": "Pegar e Atuar",
-                    "variant": "primary"
-                  },
-                  {
-                    "action": "VISUALIZAR",
-                    "label": "Visualizar",
-                    "variant": "secondary"
-                  }
-                ]
-              }
-            ]
-          }
-        }
-      ]
-    }
-  }
+  ],
+  "paginacao": {"tamanho":10,"ordenacao":{"campo":"dataEnvio","direcao":"desc"}},
+  "itens": "propostas",
+  "mensagemVazia": "Nenhuma proposta encontrada para os filtros informados."
 }

@@ -1,15 +1,22 @@
 # Mesa de Crédito — Documentação do Front-end
 
-> Front-end da mesa de análise julgamental de crédito, construído com **Server-Driven UI (SDUI)**.
+> Front-end da mesa de análise julgamental de crédito, construído com **Server-Driven UI (SDUI)
+> por templates**: o BFF diz **o que** aparece (filtros, colunas, blocos, campos, ações) e o front
+> é dono de **como** aparece (layout base de cada tela).
 > Este documento explica **o que existe**, **como funciona**, **onde mexer** para cada tipo de
 > mudança e **como migrar para o Design System da empresa**.
+>
+> Histórico: a primeira versão (branch `main` até o commit `f82e973`) tinha o layout inteiro no
+> JSON do BFF (grid, larguras, alinhamento). Esta versão (branch `feat/sdui-templates`) move o
+> layout para templates no front, porque nas mesas o **conteúdo varia** mas a **disposição é
+> sempre a mesma**.
 
 **Sumário**
 
 1. [Visão geral](#1-visão-geral)
 2. [Como rodar](#2-como-rodar)
 3. [Arquitetura em camadas](#3-arquitetura-em-camadas)
-4. [O contrato SDUI (JSON do BFF)](#4-o-contrato-sdui-json-do-bff)
+4. [O contrato do BFF (v2, por template)](#4-o-contrato-do-bff-v2-por-template)
 5. [Como o motor funciona](#5-como-o-motor-funciona)
 6. [Component Registry (o "De-Para")](#6-component-registry-o-de-para)
 7. [Migração para o Design System da empresa](#7-migração-para-o-design-system-da-empresa)
@@ -29,9 +36,11 @@ Propostas de crédito negadas nos motores automáticos caem na **mesa julgamenta
 decidem manualmente. A aplicação atende três produtos — **Crédito Varejo, Veículos e Consórcio** —
 e cada mesa tem analistas, filtros, colunas e blocos de informação diferentes.
 
-Em vez de codificar uma tela por produto, o front é um **motor genérico**: o BFF envia um JSON
-descrevendo a tela (dados + layout + ações) e o Angular apenas renderiza. Mudar a jornada de um
-produto é mudar a parametrização no BFF, **sem deploy do front**.
+Em vez de codificar uma tela por produto, o front tem **templates** (o layout base de cada tipo de
+tela) e um **motor genérico** de renderização. O BFF envia um JSON enxuto dizendo o que entra em
+cada template: quais filtros e colunas a fila da mesa tem, quais blocos e campos a análise do
+produto mostra, quais ações o analista pode executar. Mais ou menos itens, outros campos, outros
+blocos: **sem deploy do front**. Só uma **disposição nova** exige um template novo.
 
 | Tela | Rota | Estado |
 |---|---|---|
@@ -85,10 +94,19 @@ O ícone de sair no topo troca de usuário.
 │  work-queue.page → GET /v1/telas/fila                                    │
 │  proposal-analysis.page → GET /v1/propostas/:id/telas/analise            │
 └───────────────────────────────┬──────────────────────────────────────────┘
-                                │ <sdui-screen [screen]="json">
+                                │ JSON enxuto do BFF  { "template": "fila", ... }
+┌───────────────────────────────▼──────────────────────────────────────────┐
+│  TEMPLATES  (src/app/templates)          ← LAYOUT BASE de cada tela      │
+│  template-contract.model  contrato do BFF (v2)                           │
+│  compile-template         valida versão/template e escolhe o montador    │
+│  fila.template            título+contadores / filtros+botões / tabela    │
+│  analise.template         etiquetas+alertas / blocos / formulário / ações│
+│  Monta a árvore interna (grid, larguras, posição) que o motor renderiza. │
+└───────────────────────────────┬──────────────────────────────────────────┘
+                                │ árvore interna  <sdui-screen [screen]>
 ┌───────────────────────────────▼──────────────────────────────────────────┐
 │  CORE SDUI  (src/app/core/sdui)          ← NÃO muda ao trocar o DS       │
-│  models/    contrato tipado do JSON                                      │
+│  models/    tipos da árvore interna (nós, bindings, ações)               │
 │  engine/    store (signals), resolver de bindings, validação,            │
 │             data sources, renderer (ViewContainerRef.createComponent)    │
 │  actions/   dispatcher + handlers (http, navigate, notify, setState)     │
@@ -115,35 +133,166 @@ O ícone de sair no topo troca de usuário.
 - Os wrappers do `design-system` **não conhecem** JSON, store, ações nem BFF. Recebem `props`
   prontas e emitem eventos genéricos (`click`, `change`, `blur`, `submit`, `rowAction`).
 - As `features` não conhecem produto nem campos — só o endpoint da tela.
+- O **BFF não conhece layout**: nada de grid, largura ou alinhamento no contrato. Isso é dos
+  `templates`.
 
 ---
 
-## 4. O contrato SDUI (JSON do BFF)
+## 4. O contrato do BFF (v2, por template)
 
-Toda tela é um envelope com seis partes. Tipos em `src/app/core/sdui/models/`.
+Tipos em `src/app/templates/template-contract.model.ts`. Toda resposta de tela tem:
 
 ```jsonc
 {
-  "meta":    { "schemaVersion": "1.0", "screenId": "work-queue", "product": "VEICULOS",
-               "revision": "fila-veiculos@2026.09.2", "generatedAt": "...", "traceId": "..." },
-  "data":    { /* dados de negócio, somente leitura */ },
-  "state":   { /* estado editável inicial: filtros, parecer, paginação */ },
-  "sources": { /* consultas remotas reativas (opcional) */ },
-  "actions": { /* catálogo de ações, com permissões já calculadas pelo BFF */ },
-  "layout":  { /* árvore de componentes */ }
+  "meta": { "schemaVersion": "2.0", "product": "CONSORCIO", "revision": "fila-consorcio@2026.09.3",
+            "generatedAt": "...", "traceId": "..." },
+  "template": "fila",          // ou "analise" — escolhe o layout base no front
+  /* ...conteúdo do template... */
 }
 ```
 
-| Parte | Para quê |
-|---|---|
-| `meta` | Versionamento e rastreio. O motor **recusa** `schemaVersion` com major diferente de `SDUI_SUPPORTED_MAJOR` (hoje `1`). `revision` identifica a versão da parametrização. |
-| `data` | Dados de negócio (proposta, cliente, listas de opções). Nunca é alterado pela UI. |
-| `state` | O que o analista edita e o que as ações enviam de volta. |
-| `sources` | Dados buscados à parte (ex.: a página da fila). Refeitos quando os parâmetros mudam. |
-| `actions` | O que os botões fazem, com `enabled`, regras e confirmação. |
-| `layout` | Árvore de nós `{ id, type, props, children?, slots? }` que referencia os itens acima. |
+O front **recusa** `schemaVersion` com major diferente de `TEMPLATE_CONTRACT_MAJOR` (hoje `2`),
+`template` desconhecido e listas obrigatórias ausentes — com mensagem clara na tela.
 
-### 4.1 Caminhos e bindings
+> **Regra de ouro:** o BFF envia **conteúdo e regras já decididas** (valores prontos, permissões,
+> alçada, quais blocos existem). O front decide **disposição e comportamento de UI**.
+
+### 4.1 Template `fila`
+
+Layout base (fixo no front):
+
+```
+┌ título / subtítulo ─────────────────────────────── contadores ┐
+├ card "Filtros de Busca": filtros (largura automática) + Filtrar | Limpar
+└ tabela paginada: colunas do BFF + coluna Ações (fixa à direita)
+```
+
+| Campo | Obrigatório | Descrição |
+|---|---|---|
+| `titulo`, `subtitulo` | título | Cabeçalho da página |
+| `fonte.listagem` | ✅ | Endpoint da listagem paginada (recebe filtros + `page`, `size`, `sortBy`, `sortDir`) |
+| `fonte.resumo` | — | Endpoint dos contadores |
+| `contadores[]` | — | `{ label, tom, chave, filtro }` — `chave` no resumo; `filtro` aplicado ao clicar (fica ativo quando aplicado) |
+| `filtros[]` | ✅ | `{ campo, tipo: texto\|select\|data, label, placeholder?, valorInicial?, opcoes? }` — `campo` é o nome do parâmetro da listagem; selects ganham "Todos" automaticamente (`semOpcaoTodos: true` para desligar) |
+| `colunas[]` | ✅ | `{ campo, label, tipo?: texto\|badge, formato?, prefixo?, ordenavel?, alinhamento?, campoTom?, tons? }` |
+| `acoesLinha[]` | — | `{ label, variante, campoHabilitado?, motivoBloqueio?, confirmacao?, executa }` — `{campo}` em endpoint/rota vira o valor da linha |
+| `chaveLinha` | — | Campo identificador da linha (padrão `id`) |
+| `paginacao` | — | `{ tamanho, ordenacao: { campo, direcao } }` |
+| `itens`, `mensagemVazia` | — | Textos do rodapé e da tabela vazia |
+
+**Comportamento que é do template** (o BFF não precisa descrever):
+filtros em rascunho × consulta (só busca ao clicar Filtrar/Enter); Filtrar volta para a página 1;
+Limpar zera os filtros; contador aplica o filtro dele mantendo os demais; largura dos filtros
+(busca 3/12, demais 2/12, botões no fim da última linha ou numa linha própria).
+
+**Permissão por linha:** `campoHabilitado: "podePegar"` faz o botão respeitar o booleano que o BFF
+calcula para cada linha da listagem. O front nunca decide se a proposta pode ser pega.
+
+Exemplo real — `public/mocks/telas/fila/CONSORCIO.json` (76 linhas):
+
+```json
+{
+  "meta": { "schemaVersion": "2.0", "product": "CONSORCIO", "revision": "fila-consorcio@2026.09.3", "generatedAt": "..." },
+  "template": "fila",
+  "titulo": "Fila de Propostas para Atuação",
+  "subtitulo": "Mesa Consórcio",
+  "fonte": { "listagem": "/v1/propostas", "resumo": "/v1/propostas/resumo" },
+  "contadores": [
+    { "label": "Disponíveis para pegar", "tom": "info", "chave": "disponiveis", "filtro": { "situacao": "DISPONIVEL" } },
+    { "label": "Em minha atuação", "tom": "warning", "chave": "emAtuacao", "filtro": { "situacao": "EM_ATUACAO" } },
+    { "label": "Urgentes", "tom": "danger", "chave": "urgentes", "filtro": { "situacao": "URGENTE" } }
+  ],
+  "filtros": [
+    { "campo": "busca", "tipo": "texto", "label": "Buscar por ID, CPF/CNPJ ou Grupo/Cota" },
+    { "campo": "situacao", "tipo": "select", "label": "Status", "valorInicial": "DISPONIVEL", "opcoes": [ ... ] },
+    { "campo": "tipoBem", "tipo": "select", "label": "Tipo de bem", "opcoes": [ ... ] },
+    { "campo": "contemplacao", "tipo": "select", "label": "Contemplação", "opcoes": [ ... ] }
+  ],
+  "colunas": [
+    { "campo": "id", "label": "ID", "prefixo": "#", "ordenavel": true },
+    { "campo": "grupoCota", "label": "Grupo/Cota", "ordenavel": true },
+    { "campo": "valor", "label": "Valor da carta", "formato": "currency", "ordenavel": true },
+    { "campo": "statusDescricao", "label": "Status", "tipo": "badge", "campoTom": "status",
+      "tons": { "DISPONIVEL": "info", "PENDENTE": "warning", "URGENTE": "danger", "EM_ATUACAO": "neutral" } }
+  ],
+  "acoesLinha": [
+    { "label": "Pegar e Atuar", "variante": "primary", "campoHabilitado": "podePegar",
+      "motivoBloqueio": "Esta proposta já está em atuação.",
+      "executa": { "tipo": "requisicao", "metodo": "POST", "endpoint": "/v1/propostas/{id}/atribuicao" } },
+    { "label": "Visualizar", "variante": "secondary",
+      "executa": { "tipo": "navegacao", "rota": "/propostas/{id}/analise" } }
+  ],
+  "paginacao": { "tamanho": 10, "ordenacao": { "campo": "dataEnvio", "direcao": "desc" } },
+  "itens": "propostas"
+}
+```
+
+### 4.2 Template `analise`
+
+Layout base (fixo no front):
+
+```
+┌ título / subtítulo
+├ etiquetas (status, classificação...) + alertas da proposta
+├ blocos, na ordem recebida — "campos" (grade de 4) ou "tabela"
+├ formulário do analista
+└ rodapé fixo com as ações (na ordem recebida)
+```
+
+| Campo | Obrigatório | Descrição |
+|---|---|---|
+| `titulo`, `subtitulo` | título | Cabeçalho |
+| `etiquetas[]` | — | `{ texto, tom? }` |
+| `alertas[]` | — | `{ tom, titulo?, mensagem }` — o BFF só envia os que se aplicam (ex.: alçada) |
+| `blocos[]` | ✅ | `{ id, titulo, icone?, descricao?, recolhivel?, alertas?, tipo }` + `campos[]` (`tipo: "campos"`) ou `colunas[]`/`linhas[]` (`tipo: "tabela"`) |
+| `blocos[].campos[]` | — | `{ label, valor, formato?, largo?, destaque? }` — **valor pronto**, sem binding |
+| `formulario` | — | `{ titulo, icone?, campos[] }` |
+| `formulario.campos[]` | — | `{ campo, tipo: textarea\|select\|texto\|data, label, obrigatorio?, minimo?, maximo?, mensagemObrigatorio?, placeholder?, dica?, opcoes?, valorInicial? }` |
+| `acoes[]` | ✅ | ver 4.3 |
+
+Blocos por produto (hoje): todos têm **Dados da proposta**, **Cliente** e **Operações ativas**;
+Crédito Varejo acrescenta **Capacidade de pagamento**; Veículos, **Veículo e garantia** (com
+alerta de LTV); Consórcio, **Grupo e cota**. Adicionar/remover/reordenar blocos ou campos é só no BFF.
+
+### 4.3 Ações (`acoes[]` da análise e `acoesLinha[]` da fila)
+
+```jsonc
+{
+  "id": "DEVOLVER",                          // só na análise
+  "label": "Devolver", "icone": "undo", "variante": "ghost",   // primary | secondary | danger | ghost
+  "habilitada": true,                         // permissão decidida pelo BFF (perfil, alçada, status)
+  "motivoBloqueio": "Selecione o motivo da devolução.",
+  "validar": ["parecer", "motivoDevolucao"],  // campos do formulário que precisam estar válidos
+  "exigePreenchidos": ["motivoDevolucao"],    // só habilita com estes campos preenchidos
+  "confirmacao": { "titulo": "Devolver proposta?", "mensagem": "...", "botao": "Devolver", "tom": "danger" },
+  "executa": { "tipo": "requisicao", "metodo": "POST", "endpoint": "/v1/propostas/948372/acoes/devolver",
+               "enviar": ["parecer", "motivoDevolucao"] }   // padrão: todos os campos do formulário
+  // ou: "executa": { "tipo": "navegacao", "rota": "/fila" }
+}
+```
+
+Ordem de execução ao clicar: permissão → `exigePreenchidos` → `validar` → `confirmacao` →
+requisição → `effects` devolvidos pelo BFF (ex.: notificar e navegar) — ver 5.2.
+
+Formatos (`formato`): `text`, `number`, `currency`, `percent`, `date`, `datetime`, `cpf`, `cnpj`,
+`document` (CPF ou CNPJ automático), `boolean`, `months`.
+Tons (`tom`): `neutral`, `info`, `success`, `warning`, `danger`.
+
+### 4.4 Árvore interna (detalhe do motor — não é contrato)
+
+Os templates convertem o JSON enxuto numa árvore de nós que o motor renderiza. **O BFF não envia
+nem conhece esta árvore**; ela só importa para quem mexe nos templates ou no motor. Tipos em
+`src/app/core/sdui/models/`.
+
+```jsonc
+{
+  "meta": { ... }, "data": { ... }, "state": { ... }, "sources": { ... },
+  "actions": { ... },
+  "layout": { "id": "page", "type": "layout.page", "props": { ... }, "slots": { "main": [ ... ] } }
+}
+```
+
+#### Caminhos e bindings
 
 Props podem ser literais ou apontar para dados. Raízes de caminho:
 
@@ -160,7 +309,7 @@ Props podem ser literais ou apontar para dados. Raízes de caminho:
 | `{ "$tpl": "texto {caminho}" }` | texto interpolado | `{ "$tpl": "Proposta nº {data.proposta.numero}" }` |
 | `{ "$when": <condição> }` | booleano | contador ativo quando o filtro é "URGENTE" |
 
-### 4.2 Condições
+#### Condições
 
 Usadas em `visibleWhen` (nó), `enabledWhen` (ação) e `$when`. É uma **AST fechada** — nunca
 `eval` de string vinda do servidor.
@@ -174,11 +323,8 @@ Usadas em `visibleWhen` (nó), `enabledWhen` (ação) e `$when`. É uma **AST fe
 { "op": "not", "condition": { ... } }
 ```
 
-> **Regra de ouro:** regras de negócio pesadas (alçada, permissão, política) são calculadas no
-> BFF e chegam prontas (`excedeAlcada: true`, `enabled: false`). O front só avalia condições
-> simples e reativas ao que o analista preenche.
 
-### 4.3 Catálogo de componentes (`type`)
+#### Catálogo de nós (`type`) — cada um tem um wrapper no DS
 
 Fonte da verdade: `SduiPropsCatalog` em `models/sdui-node.model.ts`.
 
@@ -204,7 +350,7 @@ Formatos (`format`): `text`, `number`, `currency`, `percent`, `date`, `datetime`
 `document` (CPF ou CNPJ automático), `boolean`, `months`.
 Tons (`tone`): `neutral`, `info`, `success`, `warning`, `danger`.
 
-### 4.4 Ações
+#### Ações internas
 
 Declaradas uma vez em `actions` e referenciadas pelos nós (`"on": { "click": "APROVAR" }`).
 
@@ -229,7 +375,7 @@ Campos comuns a todas:
 **Resposta do BFF a uma ação `http`:** `{ "effects": [ ...ações ] }`. O servidor decide o que
 acontece depois (ex.: notificar + navegar para a fila) sem deploy do front.
 
-### 4.5 Data sources
+#### Data sources
 
 ```jsonc
 "sources": {
@@ -251,38 +397,6 @@ O resultado fica em `sources.fila.value`, `sources.fila.loading` e `sources.fila
 ação `FILTRAR` copia para `state.consulta.filtros` (que alimenta o source) e o `onSuccess` volta
 para a página 1. Assim a busca só dispara ao clicar em Filtrar/Enter, não a cada tecla.
 
-### 4.6 Exemplo mínimo completo
-
-```json
-{
-  "meta": { "schemaVersion": "1.0", "screenId": "exemplo", "product": "VEICULOS", "revision": "x", "generatedAt": "" },
-  "data": { "proposta": { "id": "123", "valor": 50000 } },
-  "state": { "parecer": null },
-  "actions": {
-    "APROVAR": {
-      "kind": "http", "method": "POST",
-      "endpoint": "/v1/propostas/{data.proposta.id}/acoes/aprovar",
-      "payload": { "parecer": { "$bind": "state.parecer" } },
-      "validate": ["state.parecer"]
-    }
-  },
-  "layout": {
-    "id": "page", "type": "layout.page", "props": { "title": { "$tpl": "Proposta {data.proposta.id}" } },
-    "slots": {
-      "main": [
-        { "id": "valor", "type": "display.field",
-          "props": { "label": "Valor", "value": { "$bind": "data.proposta.valor" }, "format": "currency" } },
-        { "id": "parecer", "type": "input.textarea", "bind": "state.parecer",
-          "validators": { "required": true, "minLength": 30 }, "props": { "label": "Parecer" } }
-      ],
-      "footer": [
-        { "id": "btn", "type": "action.button", "props": { "label": "Aprovar", "variant": "primary" },
-          "on": { "click": "APROVAR" } }
-      ]
-    }
-  }
-}
-```
 
 ---
 
@@ -293,7 +407,9 @@ para a página 1. Assim a busca só dispara ao clicar em Filtrar/Enter, não a c
 ```
 Página (feature)
   └─ SduiRemoteScreenComponent          httpResource GET {bff}{endpoint}
-       │                                 parse: parseSduiScreen() → valida estrutura e versão
+       │                                 parse: compileTemplateScreen()
+       │                                   → valida versão (v2), template e listas obrigatórias
+       │                                   → fila.template / analise.template montam a árvore interna
        └─ <sdui-screen [screen]>        cria o ESCOPO da tela (providers próprios):
             │                            SduiStore, SduiResolver, SduiFormState,
             │                            SduiSources, SduiActionDispatcher, SduiNodeBinder
@@ -424,7 +540,8 @@ wrapper com o motor:
 
 | Muda | Não muda |
 |---|---|
-| `src/app/design-system/**` (wrappers, adapters, marca) | `src/app/core/**` (motor, contrato, auth) |
+| `src/app/design-system/**` (wrappers, adapters, marca) | `src/app/core/**` (motor, auth) |
+| `src/app/templates/**` — **só se** o grid do DS for diferente (larguras em colunas de 12) | Contrato do BFF (`template-contract.model.ts`) |
 | `src/styles.scss` (tema e tokens) | JSONs do BFF / mocks |
 | 4 pontos pontuais fora do DS (lista em 7.4) | `src/app/features/**` (exceto o login simulado) |
 | `package.json` (troca de dependências) | Testes do motor e de contrato |
@@ -569,11 +686,11 @@ Erros seguem `{ "message": "texto para o usuário" }` — o front exibe esse tex
 | Método | Rota | Resposta | Erros |
 |---|---|---|---|
 | GET | `/v1/me` | `{ nome, perfil, mesas: [{ codigo, nome }] }` | 401 |
-| GET | `/v1/telas/fila` | `SduiScreen` da mesa do usuário | 401, 403 |
-| GET | `/v1/propostas` | `{ items, total, page, size }` | 401, 403 |
+| GET | `/v1/telas/fila` | Tela `template: "fila"` da mesa do usuário (seção 4.1) | 401, 403 |
+| GET | `/v1/propostas` | `{ items, total, page, size }` — cada item com as colunas e `podePegar` | 401, 403 |
 | GET | `/v1/propostas/resumo` | `{ disponiveis, emAtuacao, urgentes }` | 401, 403 |
 | POST | `/v1/propostas/:id/atribuicao` | `{ effects }` (ex.: notificar + navegar para a análise) | 401, 403, 404, 409 (já com outro analista) |
-| GET | `/v1/propostas/:id/telas/analise` | `SduiScreen` da análise (layout pelo produto da proposta) | 401, 403, 404 |
+| GET | `/v1/propostas/:id/telas/analise` | Tela `template: "analise"` com valores prontos (seção 4.2) | 401, 403, 404 |
 | POST | `/v1/propostas/:id/acoes/:acao` | `{ effects }` | 401, 403, 409, 422 |
 
 **Query de `/v1/propostas`:** `busca`, `situacao` (`DISPONIVEL` \| `EM_ATUACAO` \| `URGENTE`),
@@ -581,7 +698,8 @@ Erros seguem `{ "message": "texto para o usuário" }` — o front exibe esse tex
 `sortBy` (`id`, `cliente`, `valor`, `dataEnvio`, `veiculo`, `grupoCota`), `sortDir` (`asc`\|`desc`).
 
 **Ações da análise** (`:acao`): `aprovar`, `recusar`, `devolver`, `encaminhar-alcada`,
-`solicitar-vistoria` (Veículos). O corpo é o `payload` declarado no JSON da tela.
+`solicitar-vistoria` (Veículos). O corpo são os campos do formulário listados em
+`executa.enviar` (padrão: todos).
 
 > Integração com Step Functions: ao receber uma decisão, o BFF envia o `TaskToken` da proposta
 > (`SendTaskSuccess`/`SendTaskFailure`). O front não participa disso.
@@ -600,9 +718,9 @@ produção o interceptor simplesmente não é registrado.
 | `core/mocks/mock-identity.ts` | "SSO fake": perfis de teste, emissão/validação de JWT sem assinatura |
 | `core/mocks/mock-mesas.ts` | Parametrização grupo → mesa → layout |
 | `core/mocks/mock-queue.ts` | Filtro, busca, ordenação, paginação e contadores (funções puras) |
+| `core/mocks/mock-analysis.ts` | Compõe a tela de análise a partir da proposta (blocos por produto, alçada, ações) — como o BFF real fará |
 | `features/dev-login/dev-login.page.ts` | Tela `/entrar` (só existe com mock) |
-| `public/mocks/telas/fila/*.json` | Layout da fila por mesa |
-| `public/mocks/telas/analise/*.json` | Telas de análise por produto (+ contrato v2 para testar o guard) |
+| `public/mocks/telas/fila/*.json` | Fila de cada mesa no contrato enxuto (~75 linhas cada) |
 | `public/mocks/fila/propostas.json` | 120 propostas (40 por produto) |
 
 Estado em memória: "Pegar e Atuar" atribui a proposta ao usuário até recarregar a aba.
@@ -617,41 +735,53 @@ integrar o `AuthService` com o SSO.
 
 ## 11. Receitas: como estender
 
-### Novo tipo de componente (ex.: `display.timeline`)
+### Novo filtro, coluna ou contador numa mesa — **só JSON (BFF)**
 
-1. `core/sdui/models/sdui-node.model.ts` → adicione a entrada em `SduiPropsCatalog` com as props.
-   Se for interativo, adicione também em `SduiInteractionCatalog` e `SduiRuntimeCatalog`.
+Acrescente o item em `filtros[]`, `colunas[]` ou `contadores[]` da fila da mesa. O template ajusta
+larguras, envia o novo filtro como parâmetro da listagem e inclui a coluna. No BFF: aceitar o
+parâmetro novo (whitelist) e devolver o campo nas linhas.
+
+### Novo bloco, campo ou ação na análise — **só BFF**
+
+Acrescente em `blocos[]`, `blocos[].campos[]`, `formulario.campos[]` ou `acoes[]`. Ordem é a do
+array. Regras (quem pode, quando habilita) vão como `habilitada`/`exigePreenchidos`/`validar`.
+
+### Nova mesa ou produto — **só BFF**
+
+Criar o grupo, mapear grupo → mesa → produtos no Parametrizador e publicar a fila da mesa. No mock:
+`mock-mesas.ts` + `public/mocks/telas/fila/<MESA>.json` e os blocos do produto em `mock-analysis.ts`.
+
+### Novo tipo de campo/filtro (ex.: faixa de valores) — front
+
+1. Contrato: novo `tipo` em `FiltroFila` ou `CampoFormulario` (`template-contract.model.ts`).
+2. Template: tratar o `tipo` em `fila.template.ts` / `analise.template.ts`.
+3. Se precisar de widget novo, siga a próxima receita.
+
+### Novo componente visual (ex.: `display.timeline`) — front
+
+1. `core/sdui/models/sdui-node.model.ts` → entrada em `SduiPropsCatalog`
+   (e em `SduiInteractionCatalog`/`SduiRuntimeCatalog` se for interativo).
 2. `npm run build` → o compilador aponta que `DS_COMPONENT_MAP` está incompleto.
-3. Crie o wrapper em `design-system/components/` implementando
-   `SduiComponent<SduiViewOf<'display.timeline'>>`.
-4. Registre-o em `ds-component-map.ts`.
-5. Use o novo `type` nos JSONs; o teste de contrato valida o registro.
+3. Wrapper em `design-system/components/` implementando `SduiComponent<SduiViewOf<'display.timeline'>>`
+   e registro em `ds-component-map.ts`.
+4. Expor no contrato (ex.: novo `tipo` de bloco) e usar no template.
 
-### Novo tipo de ação (ex.: `download`)
+### Nova disposição de tela (novo template) — front
 
-1. Adicione a interface ao union `SduiAction` em `models/sdui-action.model.ts`.
-2. Crie um `SduiActionHandler<'download'>` em `actions/sdui-action-handlers.ts`.
-3. Registre-o no multi-provider `SDUI_ACTION_HANDLERS` em `provide-sdui.ts`.
+Quando uma tela não cabe em nenhum layout base (ex.: Tela 3 — Alçadas):
 
-### Nova mesa ou produto
+1. Contrato: nova interface com `template: 'alcadas'` em `template-contract.model.ts` e inclusão
+   no union `TemplateScreen`.
+2. Montador `alcadas.template.ts` (JSON enxuto → árvore interna).
+3. Registrar em `TEMPLATES` e `REQUIRED_LISTS` (`compile-template.ts`) — o compilador exige.
+4. Página em `features/` com `<app-sdui-remote-screen endpoint="...">` e rota em `app.routes.ts`.
 
-**Front: nada a fazer.** No BFF: criar o grupo, mapear grupo → mesa → produtos no Parametrizador,
-publicar o layout da fila e o da análise. No mock: `mock-mesas.ts` + um novo
-`public/mocks/telas/fila/<MESA>.json` (os existentes são gerados de uma base comum — siga o
-mesmo formato).
+### Novo tipo de ação interna (ex.: `download`)
 
-### Novo filtro ou coluna numa mesa
-
-**Front: nada a fazer** se usar componentes existentes. No JSON da fila: adicione o campo em
-`state.filtros` e `state.consulta.filtros`, o nó `input.*` no grid, o parâmetro em
-`sources.fila.params` e o valor em `LIMPAR_FILTROS`. No BFF: aceite o novo parâmetro
-(whitelist).
-
-### Nova tela SDUI (ex.: Tela 3 — Alçadas)
-
-1. Crie `features/<tela>/<tela>.page.ts` com `<app-sdui-remote-screen endpoint="/v1/...">`.
-2. Adicione a rota em `app.routes.ts` (dentro do bloco protegido por `authGuard`).
-3. Se precisar de componentes novos (ex.: visualização da matriz de alçada), siga a receita acima.
+1. Adicione a interface ao union `SduiAction` em `core/sdui/models/sdui-action.model.ts`.
+2. Crie um `SduiActionHandler<'download'>` em `actions/sdui-action-handlers.ts` e registre no
+   multi-provider `SDUI_ACTION_HANDLERS` (`provide-sdui.ts`).
+3. Exponha no contrato como um novo `executa.tipo` e traduza em `template-actions.ts`.
 
 ---
 
@@ -664,7 +794,8 @@ npm test
 | Arquivo | Cobre |
 |---|---|
 | `core/sdui/engine/sdui-engine.spec.ts` | Caminhos, condições, renderização a partir do JSON, `$tpl`/`$bind`/`$when`, fallback, validação bloqueando ação, two-way, `visibleWhen` na posição certa, payload resolvido, data source reativo, ação por linha com `item`, cadeia `setState` → `onSuccess` |
-| `core/mocks/mock-contract.spec.ts` | **Teste de contrato:** todo JSON de tela passa no guard, usa só tipos registrados, referencia ações existentes (inclusive por linha e `onSuccess`), faz bind só em caminhos existentes e sources declarados; contrato v2 é recusado |
+| `templates/templates.spec.ts` | Layout base: larguras dos filtros e quebra de linha dos botões, "Todos" nos selects, valor inicial × limpar, parâmetros da listagem, contadores, ações de linha com permissão do BFF; análise: ordem dos blocos, campos largos, tradução de `validar`/`exigePreenchidos`/`habilitada`/`enviar` |
+| `core/mocks/mock-contract.spec.ts` | **Teste de contrato:** as 4 filas e as análises dos 3 produtos passam no compilador e geram árvore só com tipos registrados, ações existentes e caminhos válidos; recusa major ≠ 2, template desconhecido e listas ausentes |
 | `core/mocks/mock-queue.spec.ts` | Escopo por mesa (inclusive tentativa de ampliar escopo), "em minha atuação", whitelist de filtros, busca (acento, CPF/CNPJ, placa, grupo/cota), fuso, ordenação, paginação, contadores |
 | `core/mocks/mock-identity.spec.ts` | Token (acentos, expirado, malformado) e resolução grupo → mesa → layout |
 | `app.spec.ts` | Shell renderiza |
@@ -680,6 +811,7 @@ npm test
 
 | Decisão | Por quê |
 |---|---|
+| Contrato por **template** (BFF diz o quê, front diz como) em vez de layout completo no JSON | Nas mesas o conteúdo varia e a disposição não; JSON ~6× menor e legível; o BFF não precisa saber de grid; trocar o DS não afeta o contrato |
 | Renderização com `ViewContainerRef.createComponent` + `inputBinding` (não `@switch` gigante nem Formly) | Extensível por registro, lazy por componente, props reativas via signals |
 | Contrato tipado por um único catálogo | Um lugar para evoluir; o compilador força wrapper e props corretos |
 | Wrappers sem lógica SDUI | Trocar o DS = trocar HTML/SCSS, sem tocar no motor |
@@ -692,13 +824,16 @@ npm test
 ### Limitações conhecidas
 
 - **Tela 3 (alçadas)** ainda é placeholder.
-- O guard de schema (`parseSduiScreen`) valida a estrutura mínima, não cada prop. Para
-  endurecer, gerar um JSON Schema a partir dos tipos e validar no BFF (CI) e/ou no front (dev).
+- Uma **disposição nova** (ex.: dois blocos lado a lado, filtros em outra posição) exige alterar
+  ou criar um template — ou seja, deploy do front. É a troca consciente desta versão.
+- O `compileTemplateScreen` valida versão, template e listas obrigatórias, não cada campo. Para
+  endurecer, gerar um JSON Schema de `template-contract.model.ts` e validar no BFF (CI).
 - `input.date` aceita digitação `dd/mm/aaaa` via um adapter próprio; se o DS tiver datepicker
   próprio, essa lógica sai junto com o Material.
 - A atribuição "Pegar e Atuar" no mock vale só até recarregar a aba.
 - A 1440px, textos longos em selects estreitos podem ser truncados (ex.: "Disponível para
-  pegar"); ajustável pelos `span` no JSON.
+  pegar"); a largura é regra do template (`fila.template.ts`).
+- Tabelas com muitas colunas rolam horizontalmente dentro do card; a coluna Ações fica fixa à direita.
 - Não há cache de layout no front; se necessário, usar `meta.revision` como chave.
 
 ### Próximos passos sugeridos
@@ -728,7 +863,7 @@ src/
     │   ├── api/bff-api.config.ts         token BFF_BASE_URL
     │   ├── auth/                         AuthService, authInterceptor, authGuard
     │   ├── session/current-user.ts       GET /v1/me
-    │   ├── mocks/                        BFF simulado (identidade, mesas, fila, interceptor)
+    │   ├── mocks/                        BFF simulado (identidade, mesas, fila, análise, interceptor)
     │   └── sdui/                         MOTOR SDUI
     │       ├── models/                   contrato (nós, bindings, condições, ações, tela)
     │       ├── engine/                   store, resolver, form-state, sources, binder,
@@ -745,11 +880,17 @@ src/
     │   ├── shell/                        marca e logo
     │   ├── ds-component-map.ts           De-Para
     │   └── design-system.ts              DESIGN_SYSTEM
+    ├── templates/                        LAYOUT BASE + contrato do BFF (v2)
+    │   ├── template-contract.model.ts    contrato: FilaScreen, AnaliseScreen, AcaoTela...
+    │   ├── compile-template.ts           valida e escolhe o template
+    │   ├── fila.template.ts              layout base da fila
+    │   ├── analise.template.ts           layout base da análise
+    │   └── template-actions.ts           ações do contrato → ações do motor
     ├── shared/sdui-remote-screen.component.ts   busca tela no BFF + loading/erro/403
     └── features/
         ├── work-queue/                   Tela 1
         ├── proposal-analysis/            Tela 2
         ├── placeholders/                 Tela 3 (provisório)
         └── dev-login/                    login simulado (só com mock)
-public/mocks/                             JSONs do BFF simulado
+public/mocks/                             filas por mesa (JSON enxuto) + base de propostas
 ```

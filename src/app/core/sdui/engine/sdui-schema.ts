@@ -1,29 +1,21 @@
 import { isDevMode } from '@angular/core';
 
-import { SDUI_SUPPORTED_MAJOR, SduiNode, SduiScreen } from '../models';
+import { SduiNode, SduiScreen } from '../models';
 
 export class SduiSchemaError extends Error {
   override readonly name = 'SduiSchemaError';
 }
 
 /**
- * Validação estrutural na fronteira de rede. O TypeScript não protege dados
- * vindos do servidor; isto garante o mínimo para o motor não quebrar e
- * rejeita contratos de major incompatível.
+ * Validação estrutural da árvore interna que o motor renderiza (montada
+ * pelos templates a partir do contrato do BFF). A versão do contrato é
+ * checada antes, em `compileTemplateScreen`.
  */
 export function parseSduiScreen(raw: unknown): SduiScreen {
   if (!isObject(raw)) throw new SduiSchemaError('Resposta SDUI vazia ou inválida.');
 
   const { meta, data, state, actions, layout, sources } = raw;
-  if (!isObject(meta) || typeof meta['schemaVersion'] !== 'string') {
-    throw new SduiSchemaError('SDUI sem `meta.schemaVersion`.');
-  }
-  const major = Number.parseInt(meta['schemaVersion'], 10);
-  if (major !== SDUI_SUPPORTED_MAJOR) {
-    throw new SduiSchemaError(
-      `Contrato SDUI v${meta['schemaVersion']} não suportado (esperado v${SDUI_SUPPORTED_MAJOR}.x). Atualize a aplicação.`,
-    );
-  }
+  if (!isObject(meta)) throw new SduiSchemaError('SDUI sem `meta`.');
   if (!isObject(data) || !isObject(state) || !isObject(actions)) {
     throw new SduiSchemaError('SDUI sem `data`, `state` ou `actions`.');
   }

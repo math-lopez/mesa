@@ -2,11 +2,8 @@ import { SduiAction, SduiActionId } from './sdui-action.model';
 import { Bindable } from './sdui-binding.model';
 import { SduiNode } from './sdui-node.model';
 
-/** Major suportado pelo motor. Mudança incompatível no contrato = novo major. */
-export const SDUI_SUPPORTED_MAJOR = 1;
-
 export interface SduiScreenMeta {
-  /** SemVer do contrato (`1.0`, `1.3`...). O motor recusa majors desconhecidos. */
+  /** Versão do contrato de origem (validada em `compileTemplateScreen`). */
   readonly schemaVersion: string;
   /** Identifica a tela (`proposal-analysis`, `work-queue`, `approval`...). */
   readonly screenId: string;

@@ -76,6 +76,8 @@ import { SduiComponent, SduiSlotDirective, SduiViewOf } from '../../core/sdui';
     .page__main {
       flex: 1;
       display: grid;
+      /* minmax(0, 1fr): conteúdo largo (ex.: tabela) rola no próprio card em vez de alargar a página */
+      grid-template-columns: minmax(0, 1fr);
       gap: 20px;
       padding: 0 40px 28px;
       align-content: start;
