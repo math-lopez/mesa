@@ -1,0 +1,120 @@
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$orange-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+
+  // -------------------------------------------------------------------------
+  // Tokens de marca/superfície. Ao migrar para o DS corporativo, aponte estas
+  // variáveis para os tokens oficiais — os wrappers só consomem `--ds-*`.
+  // -------------------------------------------------------------------------
+  --ds-brand-primary: #ec7000;
+  --ds-brand-primary-hover: #d46400;
+  --ds-brand-navy: #0b2d5b;
+  --ds-brand-navy-strong: #07214a;
+  --ds-page-bg: #f2f4f7;
+  --ds-surface: #ffffff;
+  --ds-surface-muted: #f6f7f9;
+  --ds-border: #dde2e9;
+  --ds-text: #1c2430;
+  --ds-shadow-sm: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
+
+  // Primária da marca sobre o tema Material (botões filled, foco, datepicker...).
+  --mat-sys-primary: var(--ds-brand-primary);
+  --mat-sys-on-primary: #ffffff;
+
+  @include mat.button-overrides(
+    (
+      filled-container-shape: 6px,
+      outlined-container-shape: 6px,
+      text-container-shape: 6px,
+      outlined-outline-color: var(--ds-border),
+    )
+  );
+}
+
+body {
+  color-scheme: light;
+  background-color: var(--ds-page-bg);
+  color: var(--ds-text);
+  font: var(--mat-sys-body-medium);
+  font-family: Roboto, 'Helvetica Neue', sans-serif;
+  margin: 0;
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+// Campos compactos (40px) com rótulo acima — padrão dos filtros.
+.ds-input {
+  @include mat.form-field-overrides(
+    (
+      container-height: 40px,
+      container-vertical-padding: 8px,
+      outlined-container-shape: 6px,
+      outlined-outline-color: var(--ds-border),
+    )
+  );
+  --mat-form-field-outlined-container-color: var(--ds-surface);
+  --mat-form-field-container-text-size: 14px;
+  --mat-select-trigger-text-size: 14px;
+}
+
+// ---------------------------------------------------------------------------
+// Tons semânticos (neutral/info/success/warning/danger) usados pelos wrappers.
+// ---------------------------------------------------------------------------
+[data-tone='neutral'] {
+  --ds-tone-bg: #eceff3;
+  --ds-tone-fg: #3a4452;
+  --ds-tone-accent: #5b6573;
+}
+[data-tone='info'] {
+  --ds-tone-bg: #dcebff;
+  --ds-tone-fg: #0b4a8b;
+  --ds-tone-accent: var(--ds-brand-navy);
+}
+[data-tone='success'] {
+  --ds-tone-bg: #e2f5e7;
+  --ds-tone-fg: #17602f;
+  --ds-tone-accent: #1b7f3b;
+}
+[data-tone='warning'] {
+  --ds-tone-bg: #fff1cc;
+  --ds-tone-fg: #6b4a00;
+  --ds-tone-accent: var(--ds-brand-primary);
+}
+[data-tone='danger'] {
+  --ds-tone-bg: #fde3e3;
+  --ds-tone-fg: #a11d1d;
+  --ds-tone-accent: #c62828;
+}
+
+.ds-snackbar--success {
+  --mat-snack-bar-container-color: #17602f;
+}
+.ds-snackbar--warning {
+  --mat-snack-bar-container-color: #6b4a00;
+}
+.ds-snackbar--danger {
+  --mat-snack-bar-container-color: #8c1d18;
+}
+
+.ds-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

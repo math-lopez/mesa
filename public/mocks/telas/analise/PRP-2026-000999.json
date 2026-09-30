@@ -1,0 +1,676 @@
+{
+  "meta": {
+    "schemaVersion": "2.0",
+    "screenId": "proposal-analysis",
+    "product": "CREDITO_VAREJO",
+    "revision": "credito-varejo@2027.01.0",
+    "generatedAt": "2026-09-29T09:12:44-03:00",
+    "traceId": "7f3c2a91e4b04d8a"
+  },
+  "data": {
+    "proposta": {
+      "id": "PRP-2026-000999",
+      "numero": "2026000123",
+      "produtoDescricao": "Crédito Pessoal",
+      "status": "EM_ANALISE",
+      "statusDescricao": "Em análise",
+      "valorSolicitado": 85000,
+      "prazoMeses": 48,
+      "taxaMensal": 0.0219,
+      "valorParcela": 2851.37,
+      "dataEntrada": "2026-09-29T08:14:00-03:00",
+      "plataforma": "Agência 0457 · Paulista",
+      "canal": "Agência",
+      "motivoMesa": "Comprometimento de renda acima da política (38% > 35%)."
+    },
+    "cliente": {
+      "nome": "Mariana Albuquerque Souza",
+      "cpf": "12345678909",
+      "segmento": "Uniclass",
+      "classificacao": "B",
+      "rendaMensal": 18500,
+      "tempoRelacionamentoMeses": 74,
+      "scoreInterno": 712,
+      "restricoesAtivas": false
+    },
+    "capacidade": {
+      "comprometimentoRenda": 0.38,
+      "comprometimentoPosOperacao": 0.46,
+      "endividamentoTotal": 142000,
+      "rendaComprovada": true
+    },
+    "alcada": {
+      "nivelAnalista": "N1",
+      "nivelNecessario": "N2",
+      "excedeAlcada": true
+    },
+    "operacoesAtivas": [
+      {
+        "contrato": "CP-88121",
+        "modalidade": "Crédito pessoal",
+        "saldoDevedor": 21450.9,
+        "parcela": 1180.4,
+        "diasAtraso": 0
+      },
+      {
+        "contrato": "CC-00913",
+        "modalidade": "Cartão de crédito",
+        "saldoDevedor": 6320.15,
+        "parcela": 910,
+        "diasAtraso": 0
+      },
+      {
+        "contrato": "CH-44102",
+        "modalidade": "Cheque especial",
+        "saldoDevedor": 2210,
+        "parcela": null,
+        "diasAtraso": 12
+      }
+    ],
+    "listas": {
+      "motivosDevolucao": [
+        {
+          "value": "DOC_PENDENTE",
+          "label": "Documentação pendente"
+        },
+        {
+          "value": "RENDA_NAO_COMPROVADA",
+          "label": "Renda não comprovada"
+        },
+        {
+          "value": "DIVERGENCIA_CADASTRAL",
+          "label": "Divergência cadastral"
+        },
+        {
+          "value": "AJUSTE_CONDICOES",
+          "label": "Ajustar valor/prazo"
+        }
+      ]
+    }
+  },
+  "state": {
+    "parecer": null,
+    "motivoDevolucao": null
+  },
+  "actions": {
+    "DEVOLVER": {
+      "kind": "http",
+      "method": "POST",
+      "endpoint": "/v1/propostas/{data.proposta.id}/acoes/devolver",
+      "payload": {
+        "motivo": {
+          "$bind": "state.motivoDevolucao"
+        },
+        "parecer": {
+          "$bind": "state.parecer"
+        }
+      },
+      "enabledWhen": {
+        "op": "exists",
+        "path": "state.motivoDevolucao"
+      },
+      "disabledReason": "Selecione o motivo da devolução.",
+      "validate": [
+        "state.parecer",
+        "state.motivoDevolucao"
+      ],
+      "confirm": {
+        "title": "Devolver proposta?",
+        "message": {
+          "$tpl": "A proposta {data.proposta.numero} voltará para a plataforma {data.proposta.plataforma}."
+        },
+        "confirmLabel": "Devolver"
+      }
+    },
+    "RECUSAR": {
+      "kind": "http",
+      "method": "POST",
+      "endpoint": "/v1/propostas/{data.proposta.id}/acoes/recusar",
+      "payload": {
+        "parecer": {
+          "$bind": "state.parecer"
+        }
+      },
+      "validate": [
+        "state.parecer"
+      ],
+      "confirm": {
+        "title": "Recusar proposta?",
+        "message": {
+          "$tpl": "Esta ação é definitiva para a proposta {data.proposta.numero}."
+        },
+        "confirmLabel": "Recusar",
+        "tone": "danger"
+      }
+    },
+    "ENCAMINHAR_ALCADA": {
+      "kind": "http",
+      "method": "POST",
+      "endpoint": "/v1/propostas/{data.proposta.id}/acoes/encaminhar-alcada",
+      "payload": {
+        "parecer": {
+          "$bind": "state.parecer"
+        },
+        "nivel": {
+          "$bind": "data.alcada.nivelNecessario"
+        }
+      },
+      "validate": [
+        "state.parecer"
+      ]
+    },
+    "APROVAR": {
+      "kind": "http",
+      "method": "POST",
+      "endpoint": "/v1/propostas/{data.proposta.id}/acoes/aprovar",
+      "payload": {
+        "parecer": {
+          "$bind": "state.parecer"
+        }
+      },
+      "enabled": false,
+      "disabledReason": "Valor acima da sua alçada (N1). Encaminhe para aprovação N2.",
+      "validate": [
+        "state.parecer"
+      ]
+    }
+  },
+  "layout": {
+    "id": "page",
+    "type": "layout.page",
+    "props": {
+      "title": {
+        "$tpl": "Proposta nº {data.proposta.numero}"
+      },
+      "subtitle": {
+        "$tpl": "{data.proposta.produtoDescricao} · {data.proposta.plataforma}"
+      }
+    },
+    "slots": {
+      "header": [
+        {
+          "id": "badge-status",
+          "type": "display.badge",
+          "props": {
+            "value": {
+              "$bind": "data.proposta.statusDescricao"
+            },
+            "tone": "info"
+          }
+        },
+        {
+          "id": "badge-classificacao",
+          "type": "display.badge",
+          "props": {
+            "label": "Classificação",
+            "value": {
+              "$bind": "data.cliente.classificacao"
+            },
+            "toneMap": {
+              "A": "success",
+              "B": "success",
+              "C": "warning",
+              "D": "danger",
+              "E": "danger"
+            }
+          }
+        },
+        {
+          "id": "badge-segmento",
+          "type": "display.badge",
+          "props": {
+            "value": {
+              "$bind": "data.cliente.segmento"
+            }
+          }
+        },
+        {
+          "id": "alert-motivo-mesa",
+          "type": "display.alert",
+          "props": {
+            "tone": "warning",
+            "title": "Motivo do envio à mesa",
+            "message": {
+              "$bind": "data.proposta.motivoMesa"
+            }
+          }
+        },
+        {
+          "id": "alert-alcada",
+          "type": "display.alert",
+          "visibleWhen": {
+            "op": "eq",
+            "path": "data.alcada.excedeAlcada",
+            "value": true
+          },
+          "props": {
+            "tone": "info",
+            "title": "Aprovação por alçada necessária",
+            "message": {
+              "$tpl": "Esta proposta exige alçada {data.alcada.nivelNecessario}. Sua alçada atual é {data.alcada.nivelAnalista}."
+            }
+          }
+        }
+      ],
+      "main": [
+        {
+          "id": "sec-proposta",
+          "type": "layout.section",
+          "props": {
+            "title": "Dados da proposta",
+            "icon": "request_quote"
+          },
+          "children": [
+            {
+              "id": "grid-proposta",
+              "type": "layout.grid",
+              "props": {
+                "columns": 4
+              },
+              "children": [
+                {
+                  "id": "f-valor",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Valor solicitado",
+                    "value": {
+                      "$bind": "data.proposta.valorSolicitado"
+                    },
+                    "format": "currency",
+                    "emphasis": true
+                  }
+                },
+                {
+                  "id": "f-prazo",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Prazo",
+                    "value": {
+                      "$bind": "data.proposta.prazoMeses"
+                    },
+                    "format": "months"
+                  }
+                },
+                {
+                  "id": "f-taxa",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Taxa mensal",
+                    "value": {
+                      "$bind": "data.proposta.taxaMensal"
+                    },
+                    "format": "percent"
+                  }
+                },
+                {
+                  "id": "f-parcela",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Parcela",
+                    "value": {
+                      "$bind": "data.proposta.valorParcela"
+                    },
+                    "format": "currency"
+                  }
+                },
+                {
+                  "id": "f-entrada",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Entrada na mesa",
+                    "value": {
+                      "$bind": "data.proposta.dataEntrada"
+                    },
+                    "format": "datetime"
+                  }
+                },
+                {
+                  "id": "f-canal",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Canal",
+                    "value": {
+                      "$bind": "data.proposta.canal"
+                    }
+                  }
+                },
+                {
+                  "id": "f-plataforma",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Plataforma",
+                    "value": {
+                      "$bind": "data.proposta.plataforma"
+                    },
+                    "span": 2
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-cliente",
+          "type": "layout.section",
+          "props": {
+            "title": "Cliente",
+            "icon": "person"
+          },
+          "children": [
+            {
+              "id": "grid-cliente",
+              "type": "layout.grid",
+              "props": {
+                "columns": 4
+              },
+              "children": [
+                {
+                  "id": "f-nome",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Nome",
+                    "value": {
+                      "$bind": "data.cliente.nome"
+                    },
+                    "span": 2
+                  }
+                },
+                {
+                  "id": "f-cpf",
+                  "type": "display.field",
+                  "props": {
+                    "label": "CPF/CNPJ",
+                    "value": {
+                      "$bind": "data.cliente.cpf"
+                    },
+                    "format": "document"
+                  }
+                },
+                {
+                  "id": "f-segmento",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Segmento",
+                    "value": {
+                      "$bind": "data.cliente.segmento"
+                    }
+                  }
+                },
+                {
+                  "id": "f-renda",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Renda mensal",
+                    "value": {
+                      "$bind": "data.cliente.rendaMensal"
+                    },
+                    "format": "currency"
+                  }
+                },
+                {
+                  "id": "f-relacionamento",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Relacionamento",
+                    "value": {
+                      "$bind": "data.cliente.tempoRelacionamentoMeses"
+                    },
+                    "format": "months"
+                  }
+                },
+                {
+                  "id": "f-score",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Score interno",
+                    "value": {
+                      "$bind": "data.cliente.scoreInterno"
+                    },
+                    "format": "number"
+                  }
+                },
+                {
+                  "id": "f-restricoes",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Restrições ativas",
+                    "value": {
+                      "$bind": "data.cliente.restricoesAtivas"
+                    },
+                    "format": "boolean"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-capacidade",
+          "type": "layout.section",
+          "props": {
+            "title": "Capacidade de pagamento",
+            "icon": "account_balance_wallet",
+            "description": "Calculado pelo motor de crédito na entrada da proposta."
+          },
+          "children": [
+            {
+              "id": "grid-capacidade",
+              "type": "layout.grid",
+              "props": {
+                "columns": 4
+              },
+              "children": [
+                {
+                  "id": "f-comprometimento",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Comprometimento atual",
+                    "value": {
+                      "$bind": "data.capacidade.comprometimentoRenda"
+                    },
+                    "format": "percent"
+                  }
+                },
+                {
+                  "id": "f-comprometimento-pos",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Após a operação",
+                    "value": {
+                      "$bind": "data.capacidade.comprometimentoPosOperacao"
+                    },
+                    "format": "percent",
+                    "emphasis": true
+                  }
+                },
+                {
+                  "id": "f-endividamento",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Endividamento total",
+                    "value": {
+                      "$bind": "data.capacidade.endividamentoTotal"
+                    },
+                    "format": "currency"
+                  }
+                },
+                {
+                  "id": "f-renda-comprovada",
+                  "type": "display.field",
+                  "props": {
+                    "label": "Renda comprovada",
+                    "value": {
+                      "$bind": "data.capacidade.rendaComprovada"
+                    },
+                    "format": "boolean"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-operacoes",
+          "type": "layout.section",
+          "props": {
+            "title": "Operações ativas",
+            "icon": "receipt_long",
+            "collapsible": true
+          },
+          "children": [
+            {
+              "id": "tbl-operacoes",
+              "type": "display.table",
+              "props": {
+                "columns": [
+                  {
+                    "key": "contrato",
+                    "header": "Contrato"
+                  },
+                  {
+                    "key": "modalidade",
+                    "header": "Modalidade"
+                  },
+                  {
+                    "key": "saldoDevedor",
+                    "header": "Saldo devedor",
+                    "format": "currency",
+                    "align": "end"
+                  },
+                  {
+                    "key": "parcela",
+                    "header": "Parcela",
+                    "format": "currency",
+                    "align": "end"
+                  },
+                  {
+                    "key": "diasAtraso",
+                    "header": "Dias em atraso",
+                    "format": "number",
+                    "align": "end"
+                  }
+                ],
+                "rows": {
+                  "$bind": "data.operacoesAtivas"
+                },
+                "emptyMessage": "Cliente sem operações ativas."
+              }
+            }
+          ]
+        },
+        {
+          "id": "sec-parecer",
+          "type": "layout.section",
+          "props": {
+            "title": "Parecer do analista",
+            "icon": "rate_review"
+          },
+          "children": [
+            {
+              "id": "in-parecer",
+              "type": "input.textarea",
+              "bind": "state.parecer",
+              "validators": {
+                "required": true,
+                "minLength": 30,
+                "maxLength": 2000,
+                "messages": {
+                  "required": "O parecer é obrigatório para qualquer decisão."
+                }
+              },
+              "props": {
+                "label": "Parecer",
+                "rows": 5,
+                "placeholder": "Justifique a decisão considerando capacidade de pagamento, histórico e garantias."
+              }
+            },
+            {
+              "id": "in-motivo-devolucao",
+              "type": "input.select",
+              "bind": "state.motivoDevolucao",
+              "validators": {
+                "required": true,
+                "messages": {
+                  "required": "Informe o motivo para devolver."
+                }
+              },
+              "props": {
+                "label": "Motivo da devolução",
+                "hint": "Obrigatório apenas para devolver a proposta.",
+                "options": {
+                  "$bind": "data.listas.motivosDevolucao"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "footer": [
+        {
+          "id": "bar-acoes",
+          "type": "layout.actionBar",
+          "props": {
+            "align": "end"
+          },
+          "children": [
+            {
+              "id": "btn-devolver",
+              "type": "action.button",
+              "props": {
+                "label": "Devolver",
+                "icon": "undo",
+                "variant": "ghost"
+              },
+              "on": {
+                "click": "DEVOLVER"
+              }
+            },
+            {
+              "id": "btn-recusar",
+              "type": "action.button",
+              "props": {
+                "label": "Recusar",
+                "icon": "block",
+                "variant": "danger"
+              },
+              "on": {
+                "click": "RECUSAR"
+              }
+            },
+            {
+              "id": "btn-encaminhar",
+              "type": "action.button",
+              "visibleWhen": {
+                "op": "eq",
+                "path": "data.alcada.excedeAlcada",
+                "value": true
+              },
+              "props": {
+                "label": {
+                  "$tpl": "Encaminhar para {data.alcada.nivelNecessario}"
+                },
+                "icon": "forward",
+                "variant": "secondary"
+              },
+              "on": {
+                "click": "ENCAMINHAR_ALCADA"
+              }
+            },
+            {
+              "id": "btn-aprovar",
+              "type": "action.button",
+              "props": {
+                "label": "Aprovar",
+                "icon": "check_circle",
+                "variant": "primary"
+              },
+              "on": {
+                "click": "APROVAR"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
