@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
+import { AuthService } from './core/auth/auth.service';
 
 import { CurrentUserService } from './core/session/current-user';
 import { BRAND } from './design-system/shell/brand';
@@ -23,14 +25,24 @@ import { DsLogoComponent } from './design-system/shell/ds-logo.component';
         <ds-logo />
         <span>| {{ brand.module }}</span>
       </div>
-      <div class="topbar__user">
-        <span class="avatar" aria-hidden="true">{{ session.initials() }}</span>
-        <span>{{ session.user().perfil }} - {{ session.user().nome }}</span>
-        <button type="button" class="bell" aria-label="Notificações (novas)">
-          <mat-icon>notifications</mat-icon>
-          <span class="bell__dot" aria-hidden="true"></span>
-        </button>
-      </div>
+      @if (session.user(); as user) {
+        <div class="topbar__user">
+          <span class="avatar" aria-hidden="true">{{ session.initials() }}</span>
+          <span class="topbar__identity">
+            <span>{{ user.perfil }} - {{ user.nome }}</span>
+            <small>{{ session.mesasLabel() }}</small>
+          </span>
+          <button type="button" class="icon-btn" aria-label="Notificações (novas)">
+            <mat-icon>notifications</mat-icon>
+            <span class="bell__dot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="icon-btn" aria-label="Sair / trocar usuário" (click)="signOut()">
+            <mat-icon>logout</mat-icon>
+          </button>
+        </div>
+      } @else {
+        <span></span>
+      }
     </header>
 
     <div class="frame">
@@ -104,7 +116,15 @@ import { DsLogoComponent } from './design-system/shell/ds-logo.component';
       font-size: 12px;
       font-weight: 700;
     }
-    .bell {
+    .topbar__identity {
+      display: grid;
+      line-height: 1.2;
+    }
+    .topbar__identity small {
+      font-size: 12px;
+      opacity: 0.8;
+    }
+    .icon-btn {
       position: relative;
       display: grid;
       place-items: center;
@@ -116,7 +136,7 @@ import { DsLogoComponent } from './design-system/shell/ds-logo.component';
       color: inherit;
       cursor: pointer;
     }
-    .bell:hover {
+    .icon-btn:hover {
       background: rgb(255 255 255 / 10%);
     }
     .bell__dot {
@@ -181,7 +201,7 @@ import { DsLogoComponent } from './design-system/shell/ds-logo.component';
     }
     @media (max-width: 600px) {
       .topbar__brand span,
-      .topbar__user > span:not(.avatar) {
+      .topbar__identity {
         display: none;
       }
     }
@@ -190,4 +210,11 @@ import { DsLogoComponent } from './design-system/shell/ds-logo.component';
 export class App {
   protected readonly brand = BRAND;
   protected readonly session = inject(CurrentUserService);
+  readonly #auth = inject(AuthService);
+  readonly #router = inject(Router);
+
+  protected signOut(): void {
+    this.#auth.signOut();
+    void this.#router.navigateByUrl('/entrar');
+  }
 }

@@ -59,7 +59,12 @@ const MAX_PAGE_BUTTONS = 5;
               >
                 {{ column.header }}
               </th>
-              <td mat-cell *matCellDef="let row" [class.end]="column.align === 'end'">
+              <td
+                mat-cell
+                *matCellDef="let row"
+                [class.end]="column.align === 'end'"
+                [class.nowrap]="!!column.format || !!column.kind || !!column.prefix"
+              >
                 @switch (column.kind) {
                   @case ('badge') {
                     <span class="pill" [attr.data-tone]="toneOf(column, row)">{{ row[column.key] }}</span>
@@ -156,6 +161,9 @@ const MAX_PAGE_BUTTONS = 5;
     }
     .end {
       text-align: end;
+    }
+    .nowrap {
+      white-space: nowrap;
     }
     .pill {
       display: inline-block;

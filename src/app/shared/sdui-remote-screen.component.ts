@@ -1,4 +1,4 @@
-import { httpResource } from '@angular/common/http';
+import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 
 import { BFF_BASE_URL } from '../core/api/bff-api.config';
@@ -37,6 +37,9 @@ export class SduiRemoteScreenComponent {
 
   protected readonly errorMessage = computed(() => {
     const error = this.screen.error();
-    return error instanceof SduiSchemaError ? error.message : this.errorFallback();
+    if (error instanceof SduiSchemaError) return error.message;
+    // 403 = usuário sem acesso (ex.: proposta de outra mesa): mostra o motivo dado pelo BFF.
+    const serverMessage = error instanceof HttpErrorResponse ? (error.error as { message?: unknown } | null)?.message : null;
+    return typeof serverMessage === 'string' ? serverMessage : this.errorFallback();
   });
 }

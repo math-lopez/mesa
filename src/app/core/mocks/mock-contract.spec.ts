@@ -2,7 +2,10 @@ import varejo from '../../../../public/mocks/telas/analise/PRP-2026-000123.json'
 import veiculos from '../../../../public/mocks/telas/analise/PRP-2026-000456.json';
 import consorcio from '../../../../public/mocks/telas/analise/PRP-2026-000789.json';
 import incompativel from '../../../../public/mocks/telas/analise/PRP-2026-000999.json';
-import fila from '../../../../public/mocks/telas/fila.json';
+import filaGeral from '../../../../public/mocks/telas/fila/GERAL.json';
+import filaCredito from '../../../../public/mocks/telas/fila/CREDITO_VAREJO.json';
+import filaVeiculos from '../../../../public/mocks/telas/fila/VEICULOS.json';
+import filaConsorcio from '../../../../public/mocks/telas/fila/CONSORCIO.json';
 
 import { DS_COMPONENT_MAP } from '../../design-system/ds-component-map';
 import { SduiNode, SduiSchemaError, SduiScreen, parseSduiScreen } from '../sdui';
@@ -12,7 +15,7 @@ import { SduiNode, SduiSchemaError, SduiScreen, parseSduiScreen } from '../sdui'
  * Quando o BFF real existir, este mesmo teste pode rodar contra respostas gravadas dele.
  */
 describe('contrato SDUI dos mocks do BFF', () => {
-  const screens = { fila, varejo, veiculos, consorcio };
+  const screens = { filaGeral, filaCredito, filaVeiculos, filaConsorcio, varejo, veiculos, consorcio };
 
   for (const [nome, raw] of Object.entries(screens)) {
     describe(nome, () => {
