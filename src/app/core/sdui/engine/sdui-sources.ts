@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 
 import { BFF_BASE_URL } from '../../api/bff-api.config';
+import { DebugLogger } from '../../debug/debug-logger';
 import { SduiDataSource, SduiScreen } from '../models';
 import { SduiResolver } from './sdui-resolver';
 import { SduiSourceSnapshot, SduiStore } from './sdui-store';
@@ -25,6 +26,7 @@ export class SduiSources {
   readonly #resolver = inject(SduiResolver);
   readonly #store = inject(SduiStore);
   readonly #baseUrl = inject(BFF_BASE_URL);
+  readonly #debug = inject(DebugLogger);
   #resources: ResourceRef<unknown>[] = [];
 
   init(screen: Pick<SduiScreen, 'sources'>): void {
@@ -32,17 +34,20 @@ export class SduiSources {
     this.#resources = [];
 
     const snapshots = Object.fromEntries(
-      Object.entries(screen.sources ?? {}).map(([name, source]) => [name, this.#create(source)]),
+      Object.entries(screen.sources ?? {}).map(([name, source]) => [name, this.#create(name, source)]),
     );
     this.#store.attachSources(snapshots);
   }
 
-  #create(source: SduiDataSource): Signal<SduiSourceSnapshot> {
+  #create(name: string, source: SduiDataSource): Signal<SduiSourceSnapshot> {
     const resource = runInInjectionContext(this.#injector, () =>
-      httpResource<unknown>(() => ({
-        url: `${this.#baseUrl}${this.#resolver.interpolate(source.endpoint)}`,
-        params: toHttpParams(this.#resolver.resolve(source.params ?? {})),
-      })),
+      httpResource<unknown>(() => {
+        const endpoint = this.#resolver.interpolate(source.endpoint);
+        const params = this.#resolver.resolve(source.params ?? {});
+        // Roda de novo sempre que um parâmetro ligado ao `state` muda.
+        this.#debug.log('source', `"${name}" consultando ${endpoint}`, { parâmetros: params });
+        return { url: `${this.#baseUrl}${endpoint}`, params: toHttpParams(params) };
+      }),
     );
     this.#resources.push(resource);
 

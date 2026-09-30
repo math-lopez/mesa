@@ -75,12 +75,16 @@ diferentes no token e, portanto, uma fila diferente:
 
 O ícone de sair no topo troca de usuário.
 
+**Para acompanhar o que acontece por trás**, abra o DevTools (F12 → Console): em desenvolvimento o
+modo debug registra cada chamada ao BFF, as decisões do BFF simulado e cada passo do motor
+(seção [10.1](#101-modo-debug-acompanhando-a-sequência-no-console)).
+
 **Ambientes** (`src/environments/`):
 
-| Arquivo | `bffBaseUrl` | `useMockBff` | Uso |
-|---|---|---|---|
-| `environment.development.ts` | `/bff` | `true` | `npm start` — BFF simulado no navegador |
-| `environment.ts` | `/bff` | `false` | build de produção — chama o BFF real |
+| Arquivo | `bffBaseUrl` | `useMockBff` | `debug` | Uso |
+|---|---|---|---|---|
+| `environment.development.ts` | `/bff` | `true` | `true` | `npm start` — BFF simulado no navegador, log no console |
+| `environment.ts` | `/bff` | `false` | `false` | build de produção — chama o BFF real, sem log |
 
 ---
 
@@ -714,7 +718,7 @@ produção o interceptor simplesmente não é registrado.
 
 | Arquivo | Papel |
 |---|---|
-| `core/mocks/mock-bff.interceptor.ts` | Roteia as chamadas; valida token (401), resolve mesa (403), aplica escopo |
+| `core/mocks/mock-bff.interceptor.ts` | Roteia as chamadas; valida token (401), resolve mesa (403), aplica escopo; registra as decisões no modo debug |
 | `core/mocks/mock-identity.ts` | "SSO fake": perfis de teste, emissão/validação de JWT sem assinatura |
 | `core/mocks/mock-mesas.ts` | Parametrização grupo → mesa → layout |
 | `core/mocks/mock-queue.ts` | Filtro, busca, ordenação, paginação e contadores (funções puras) |
@@ -732,6 +736,93 @@ configure um proxy do `ng serve` de `/bff` para o BFF local (`proxy.conf.json` c
 integrar o `AuthService` com o SSO.
 
 ---
+
+### 10.1 Modo debug: acompanhando a sequência no console
+
+Com `environment.debug: true` (padrão em `npm start`), abra o **DevTools → Console**. Cada evento
+vira uma linha com um selo colorido, em ordem. Linhas com detalhes são **grupos recolhidos**:
+clique para ver o corpo da resposta, o contrato recebido, a árvore montada, os parâmetros etc.
+
+| Selo | O que registra | Onde nasce |
+|---|---|---|
+| `ROTA` | Cada navegação concluída | `core/debug/debug-logger.ts` |
+| `AUTH` | Login, logout, 401 que derruba a sessão | `core/auth/*` |
+| `HTTP` | `→ #n` ida (método, URL com query, corpo, token mascarado) · `← #n` volta (status, corpo, tempo) · `✕ #n` erro · `⊘ #n` cancelada | `core/debug/debug-http.interceptor.ts` |
+| `BFF (mock)` | O que o "servidor" decidiu: usuário e mesa do token, parametrização escolhida, escopo e total da listagem, `podePegar` por linha, 401/403/404/409 e o porquê | `core/mocks/mock-bff.interceptor.ts` |
+| `TEMPLATE` | JSON enxuto recebido → árvore interna montada (nós, estado inicial, ações, sources) | `shared/sdui-remote-screen.component.ts` |
+| `SOURCE` | Uma consulta (tabela, contadores) sendo refeita e com quais parâmetros | `core/sdui/engine/sdui-sources.ts` |
+| `AÇÃO` | `▶` início com a definição e a linha clicada · bloqueio/validação/confirmação · `executando …` · efeitos devolvidos pelo BFF · `■` concluída / `✕` falhou | `core/sdui/actions/sdui-action-dispatcher.ts` |
+| `ESTADO` | Mudanças em `state`: filtros aplicados, página, ordenação, campos (texto só ao sair do campo) | `sdui-node-binder.ts`, `setState` |
+
+**Exemplo real — Carlos (Mesa Veículos) entrando na fila** (capturado do console):
+
+```text
+ ROTA      /entrar?perfil=u-carlos
+ AUTH      sessão iniciada (token recebido do SSO)
+ HTTP      → #1 GET /v1/me
+ BFF       GET /v1/me: token de Carlos Souza (Analista) → Mesa Veículos
+ ROTA      /fila
+ HTTP      → #2 GET /v1/telas/fila
+ BFF       GET /v1/telas/fila: token de Carlos Souza (Analista) → Mesa Veículos
+ BFF       fila: uma mesa → parametrização telas/fila/VEICULOS.json
+ HTTP      ← #1 200 GET /v1/me (151 ms)
+ HTTP      ← #2 200 GET /v1/telas/fila (460 ms)            ▸ resposta = JSON enxuto da fila
+ TEMPLATE  "fila" v2.0 (VEICULOS) → 14 nós na árvore interna
+ SOURCE    "fila" consultando /v1/propostas               ▸ parâmetros vindos do state
+ HTTP      → #3 GET /v1/propostas?situacao=DISPONIVEL&page=0&size=10&sortBy=dataEnvio&sortDir=desc
+ SOURCE    "resumo" consultando /v1/propostas/resumo
+ HTTP      → #4 GET /v1/propostas/resumo
+ BFF       listagem no escopo [VEICULOS]: 35 proposta(s) após filtros → página 1 com 10
+ BFF       resumo no escopo [VEICULOS]
+ HTTP      ← #4 200 GET /v1/propostas/resumo (210 ms)
+ HTTP      ← #3 200 GET /v1/propostas?... (460 ms)           ▸ resposta = { items, total, page, size }
+```
+
+**Exemplo — clicar em "Filtrar" com Tipo de veículo = Usado** (ilustrativo e abreviado; totais e tempos variam):
+
+```text
+ ESTADO    state.filtros.tipoVeiculo ← "USADO"            (o select só muda o rascunho)
+ AÇÃO      ▶ FILTRAR (setState)
+ AÇÃO        executando setState state.consulta.filtros
+ ESTADO    state.consulta.filtros ← {"busca":null,"situacao":"DISPONIVEL","tipoVeiculo":"USADO",...}
+ AÇÃO          executando setState state.consulta.tabela.pageIndex      (onSuccess)
+ ESTADO    state.consulta.tabela.pageIndex ← 0
+ AÇÃO      ■ FILTRAR concluída (2 ms)
+ SOURCE    "fila" consultando /v1/propostas               (reagiu à mudança do state)
+ HTTP      → #5 GET /v1/propostas?situacao=DISPONIVEL&tipoVeiculo=USADO&page=0&...
+ BFF       listagem no escopo [VEICULOS]: 22 proposta(s) após filtros → página 1 com 10
+ HTTP      ← #5 200 ...
+```
+
+**Exemplo — "Pegar e Atuar" numa linha** (ilustrativo e abreviado; ids, contagens e tempos variam):
+
+```text
+ AÇÃO      ▶ LINHA_0 (http)                               ▸ escopo.item = a linha clicada
+ AÇÃO        executando http POST /v1/propostas/{item.id}/atribuicao
+ HTTP      → #6 POST /v1/propostas/948419/atribuicao
+ BFF       proposta 948419 atribuída a Carlos Souza; devolvendo efeitos: notificar → navegar para a análise
+ HTTP      ← #6 200 POST /v1/propostas/948419/atribuicao  ▸ resposta = { effects: [...] }
+ AÇÃO        BFF devolveu 2 efeito(s): notify → navigate
+ AÇÃO          executando notificação "Proposta #948419 atribuída a você."
+ AÇÃO          executando navegação → /propostas/948419/analise
+ ROTA      /propostas/948419/analise
+ AÇÃO      ■ LINHA_0 concluída (468 ms)
+ HTTP      → #7 GET /v1/propostas/948419/telas/analise
+ BFF       compondo análise de 948419 (VEICULOS): 4 blocos, ações DEVOLVER, RECUSAR, SOLICITAR_VISTORIA, APROVAR
+ HTTP      ← #7 200 ...                                    ▸ resposta = JSON enxuto da análise
+ TEMPLATE  "analise" v2.0 (VEICULOS) → 32 nós na árvore interna
+```
+
+**Dicas**
+
+- Filtre por categoria digitando o selo na caixa de filtro do console (ex.: `HTTP`, `BFF`, `AÇÃO`).
+- A aba **Network** não mostra as chamadas enquanto o BFF é simulado (elas são respondidas dentro
+  do navegador); o log `HTTP` cumpre esse papel. Com o BFF real, as duas coisas aparecem.
+- Desligar/ligar sem recompilar: `localStorage.setItem('mesa.debug', 'off')` (ou `'on'`) e recarregar.
+- O token aparece mascarado: o front o trata como opaco. Os claims ficam visíveis no log `BFF`,
+  porque é o servidor quem os lê.
+- Com o BFF real, os logs `BFF (mock)` somem (as decisões passam a ficar nos logs do servidor);
+  todo o resto continua igual.
 
 ## 11. Receitas: como estender
 
@@ -863,6 +954,7 @@ src/
     │   ├── api/bff-api.config.ts         token BFF_BASE_URL
     │   ├── auth/                         AuthService, authInterceptor, authGuard
     │   ├── session/current-user.ts       GET /v1/me
+    │   ├── debug/                        modo debug: logger no console + interceptor HTTP
     │   ├── mocks/                        BFF simulado (identidade, mesas, fila, análise, interceptor)
     │   └── sdui/                         MOTOR SDUI
     │       ├── models/                   contrato (nós, bindings, condições, ações, tela)

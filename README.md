@@ -17,6 +17,10 @@ npm test         # Vitest: motor, templates, BFF simulado e teste de contrato
 npm run build    # build de produção (sem mocks)
 ```
 
+Abra o **DevTools → Console** para acompanhar, em ordem, cada chamada ao BFF, a resposta, as
+decisões do BFF simulado e cada passo do motor (modo debug, só em desenvolvimento — ver
+[docs/ARQUITETURA.md §10.1](docs/ARQUITETURA.md#101-modo-debug-acompanhando-a-sequência-no-console)).
+
 O login é simulado em `/entrar`. Cada perfil tem grupos diferentes no token e, portanto, uma fila
 diferente (atalho: `/entrar?perfil=<id>`):
 

@@ -3,4 +3,5 @@ export const environment = {
   bffBaseUrl: '/bff',
   /** Em produção o BFF é real. */
   useMockBff: false,
+  debug: false,
 };

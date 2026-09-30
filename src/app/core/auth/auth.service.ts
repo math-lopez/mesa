@@ -1,4 +1,6 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
+
+import { DebugLogger } from '../debug/debug-logger';
 
 const STORAGE_KEY = 'mesa-credito.token';
 
@@ -12,6 +14,7 @@ const STORAGE_KEY = 'mesa-credito.token';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   readonly #token = signal<string | null>(readStoredToken());
+  readonly #debug = inject(DebugLogger);
 
   readonly token = this.#token.asReadonly();
   readonly isAuthenticated = computed(() => this.#token() !== null);
@@ -19,11 +22,13 @@ export class AuthService {
   signIn(token: string): void {
     this.#token.set(token);
     writeStoredToken(token);
+    this.#debug.log('auth', 'sessão iniciada (token recebido do SSO)');
   }
 
   signOut(): void {
     this.#token.set(null);
     writeStoredToken(null);
+    this.#debug.log('auth', 'sessão encerrada');
   }
 }
 

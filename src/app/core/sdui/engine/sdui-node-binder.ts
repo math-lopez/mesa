@@ -1,5 +1,6 @@
 import { Injectable, Signal, computed, inject } from '@angular/core';
 
+import { DebugLogger } from '../../debug/debug-logger';
 import { SduiActionDispatcher } from '../actions/sdui-action-dispatcher';
 import { SduiNode, SduiUiEvent, isFieldNode, isInteractiveNode, submitActionOf } from '../models';
 import { SduiFormState } from './sdui-form-state';
@@ -23,6 +24,7 @@ export class SduiNodeBinder {
   readonly #resolver = inject(SduiResolver);
   readonly #form = inject(SduiFormState);
   readonly #dispatcher = inject(SduiActionDispatcher);
+  readonly #debug = inject(DebugLogger);
 
   bind(node: SduiNode): SduiNodeBinding {
     const field = isFieldNode(node) ? node : null;
@@ -54,10 +56,20 @@ export class SduiNodeBinder {
           if (interactive) void this.#dispatcher.dispatch(interactive.on.click);
           break;
         case 'change':
-          if (field) this.#store.write(field.bind, event.value);
+          if (!field) break;
+          this.#store.write(field.bind, event.value);
+          // Campos de digitação logam no blur (um evento por campo, não por tecla).
+          if (!TYPING.has(node.type)) {
+            this.#debug.log('estado', `${field.bind} ← ${preview(event.value)}`, { nó: node.id, valor: event.value });
+          }
           break;
         case 'blur':
-          if (field) this.#form.touch(field.bind);
+          if (!field) break;
+          this.#form.touch(field.bind);
+          if (TYPING.has(node.type)) {
+            const value = this.#store.read(field.bind);
+            this.#debug.log('estado', `${field.bind} ← ${preview(value)}`, { nó: node.id, valor: value });
+          }
           break;
         case 'submit':
           if (submitAction) void this.#dispatcher.dispatch(submitAction);
@@ -70,6 +82,13 @@ export class SduiNodeBinder {
 
     return { props, handle, dispose: unregister };
   }
+}
+
+const TYPING = new Set<string>(['input.text', 'input.textarea']);
+
+function preview(value: unknown): string {
+  const text = typeof value === 'string' ? `"${value}"` : JSON.stringify(value);
+  return text.length > 60 ? `${text.slice(0, 57)}…` : text;
 }
 
 /** Evita re-render do wrapper quando nenhuma prop mudou de fato. */

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { BFF_BASE_URL } from '../../api/bff-api.config';
+import { DebugLogger } from '../../debug/debug-logger';
 import {
   SduiActionResult,
   SduiHttpAction,
@@ -50,8 +51,11 @@ export class SduiNotifyActionHandler implements SduiActionHandler<'notify'> {
 @Injectable({ providedIn: 'root' })
 export class SduiSetStateActionHandler implements SduiActionHandler<'setState'> {
   readonly kind = 'setState';
+  readonly #debug = inject(DebugLogger);
 
   async execute(action: SduiSetStateAction, { store, resolver, scope }: SduiActionContext): Promise<void> {
-    store.write(action.path, resolver.resolve(action.value, scope));
+    const value = resolver.resolve(action.value, scope);
+    store.write(action.path, value);
+    this.#debug.log('estado', `${action.path} ← ${JSON.stringify(value)}`, { valor: value });
   }
 }
